@@ -8,6 +8,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ ROOT ROUTE (fix Cannot GET /)
+app.get("/", (req, res) => {
+    res.send("🤖 A3R Bot API is RUNNING on Railway");
+});
+
 app.post("/login", (req, res) => {
     const { botId } = req.body;
     bots[botId] = { children: [] };
@@ -76,4 +81,9 @@ app.post("/cricket/start", (req, res) => {
     res.json({ cricket: rooms[room].cricket });
 });
 
-app.listen(3000, () => console.log("Server running on 3000"));
+// ✅ FIXED PORT
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
+});
