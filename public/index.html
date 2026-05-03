@@ -1,39 +1,64 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>A3R Login</title>
-</head>
-<body>
-
-<h2>🤖 A3R BOT LOGIN</h2>
-
-<input id="username" placeholder="Username"><br><br>
-<input id="password" type="password" placeholder="Password"><br><br>
-<button onclick="login()">Login</button>
-
-<p id="msg"></p>
-
 <script>
+let socket;
+
 async function login() {
+    const username = document.getElementById("user").value;
+    const password = document.getElementById("pass").value;
+
     const res = await fetch("/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            username: username.value,
-            password: password.value
-        })
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, password })
     });
 
     const data = await res.json();
 
-    if (data.ok) {
-        localStorage.setItem("user", data.username);
-        window.location.href = "/dashboard";
-    } else {
-        msg.innerText = "Login Failed";
+    const status = document.getElementById("status");
+
+    if (!data.ok) {
+        status.innerText = "❌ Login Failed";
+        return;
     }
+
+    status.innerText = "⏳ Connecting to chat server...";
+
+    // 🔥 CONNECT TO YOUR REAL SERVER
+    socket = new WebSocket("wss://viberschat.space:8443/server");
+
+    socket.onopen = () => {
+        status.innerText = "🔐 Sending login to chat server...";
+
+        const loginPacket = {
+            handler: "3rd_login",
+            payload: {
+                username: username,
+                password: password,
+                api_key: "xYn86hjOpJk$"
+            }
+        };
+
+        socket.send(JSON.stringify(loginPacket));
+    };
+
+    // 🔥 RECEIVE RESPONSE (LIKE VB.NET ReceiveMessagesAsync)
+    socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.handler === "login_result") {
+            if (msg.ok) {
+                status.innerText = "✅ Bot Connected Successfully!";
+            } else {
+                status.innerText = "❌ Bot Login Failed: " + msg.message;
+            }
+        }
+    };
+
+    socket.onerror = () => {
+        status.innerText = "❌ Connection Error";
+    };
+
+    socket.onclose = () => {
+        console.log("Disconnected");
+    };
 }
 </script>
-
-</body>
-</html>
