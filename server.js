@@ -1,8 +1,10 @@
 const express = require("express");
 const app = express();
 
+app.use(express.static("public")); // 👈 IMPORTANT
+
 app.get("/", (req, res) => {
-    res.send("✅ A3R BOT IS LIVE ON RAILWAY");
+    res.sendFile(__dirname + "/public/login.html");
 });
 
 const PORT = process.env.PORT || 8080;
