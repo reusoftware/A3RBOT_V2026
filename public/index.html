@@ -1,32 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>A3R BOT LOGIN</title>
+</head>
+<body style="font-family:Arial; text-align:center; margin-top:100px;">
+
+<h2>🤖 A3R BOT LOGIN</h2>
+
+<input id="user" placeholder="Username"><br><br>
+<input id="pass" type="password" placeholder="Password"><br><br>
+
+<button onclick="login()">LOGIN BOT</button>
+
+<p id="status"></p>
+
 <script>
 let socket;
 
-async function login() {
+function login() {
     const username = document.getElementById("user").value;
     const password = document.getElementById("pass").value;
-
-    const res = await fetch("/login", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ username, password })
-    });
-
-    const data = await res.json();
-
     const status = document.getElementById("status");
 
-    if (!data.ok) {
-        status.innerText = "❌ Login Failed";
+    if (!username || !password) {
+        status.innerText = "❌ Enter username & password";
         return;
     }
 
     status.innerText = "⏳ Connecting to chat server...";
 
-    // 🔥 CONNECT TO YOUR REAL SERVER
+    // 🔥 CONNECT TO YOUR REAL CHAT SERVER
     socket = new WebSocket("wss://viberschat.space:8443/server");
 
     socket.onopen = () => {
-        status.innerText = "🔐 Sending login to chat server...";
+        status.innerText = "🔐 Sending login...";
 
         const loginPacket = {
             handler: "3rd_login",
@@ -40,21 +47,31 @@ async function login() {
         socket.send(JSON.stringify(loginPacket));
     };
 
-    // 🔥 RECEIVE RESPONSE (LIKE VB.NET ReceiveMessagesAsync)
     socket.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
+        try {
+            const msg = JSON.parse(event.data);
 
-        if (msg.handler === "login_result") {
-            if (msg.ok) {
-                status.innerText = "✅ Bot Connected Successfully!";
+            console.log("SERVER:", msg);
+
+            // 🔥 IMPORTANT: SHOW RESULT EVEN IF FORMAT DIFFERENT
+            if (msg.handler === "login_result") {
+                if (msg.ok === true) {
+                    status.innerText = "✅ BOT CONNECTED!";
+                } else {
+                    status.innerText = "❌ LOGIN FAILED: " + (msg.message || "Unknown");
+                }
             } else {
-                status.innerText = "❌ Bot Login Failed: " + msg.message;
+                // fallback (your server may not send handler)
+                status.innerText = "⚠️ Response: " + JSON.stringify(msg);
             }
+
+        } catch (e) {
+            status.innerText = "⚠️ Raw: " + event.data;
         }
     };
 
     socket.onerror = () => {
-        status.innerText = "❌ Connection Error";
+        status.innerText = "❌ Connection Error (CORS / blocked)";
     };
 
     socket.onclose = () => {
@@ -62,3 +79,6 @@ async function login() {
     };
 }
 </script>
+
+</body>
+</html>
