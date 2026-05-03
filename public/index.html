@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>A3R WEB BOT</title>
+
     <style>
         body { font-family: Arial; }
 
@@ -59,27 +60,27 @@
 
 <script>
 let socket;
-let currentUser = "";
 let currentRoom = "";
 
-// ===== LOGIN =====
+// ================= LOGIN =================
 function login() {
     const username = document.getElementById("user").value;
     const password = document.getElementById("pass").value;
     const status = document.getElementById("status");
 
     if (!username || !password) {
-        status.innerText = "❌ Enter credentials";
+        status.innerText = "❌ Enter username & password";
         return;
     }
 
-    currentUser = username;
-
-    status.innerText = "⏳ Connecting...";
+    status.innerText = "⏳ Connecting to chat server...";
 
     socket = new WebSocket("wss://viberschat.space:8443/server");
 
+    // CONNECTED
     socket.onopen = () => {
+        status.innerText = "🔐 Sending login...";
+
         const loginPacket = {
             handler: "3rd_login",
             payload: {
@@ -89,56 +90,54 @@ function login() {
             }
         };
 
+        console.log("SEND:", loginPacket);
         socket.send(JSON.stringify(loginPacket));
     };
 
+    // RECEIVE ANY MESSAGE (IMPORTANT FIX)
     socket.onmessage = (event) => {
-        try {
-            const msg = JSON.parse(event.data);
-            console.log(msg);
+        console.log("RECEIVED:", event.data);
 
-            // LOGIN RESULT
-            if (msg.handler === "login_result") {
-                if (msg.ok) {
-                    status.innerText = "✅ Connected!";
-                    document.getElementById("loginDiv").style.display = "none";
-                    document.getElementById("chatUI").style.display = "block";
-                } else {
-                    status.innerText = "❌ Login failed";
-                }
-                return;
-            }
+        // 🔥 ALWAYS SHOW MESSAGE
+        addChat(event.data);
 
-            // DISPLAY EVERYTHING ELSE
-            addChat(JSON.stringify(msg));
+        // 🔥 AUTO OPEN CHAT UI (like VB.NET behavior)
+        document.getElementById("loginDiv").style.display = "none";
+        document.getElementById("chatUI").style.display = "block";
 
-        } catch {
-            addChat(event.data);
-        }
+        document.getElementById("status").innerText = "✅ Connected (receiving data)";
     };
 
     socket.onerror = () => {
         status.innerText = "❌ Connection error";
     };
+
+    socket.onclose = () => {
+        console.log("Disconnected");
+    };
 }
 
-// ===== JOIN ROOM =====
+// ================= JOIN ROOM =================
 function joinRoom() {
     const room = document.getElementById("room").value;
     currentRoom = room;
 
+    if (!room) {
+        addChat("❌ Enter room name");
+        return;
+    }
+
     const packet = {
         handler: "room_join",
-        payload: {
-            room: room
-        }
+        payload: { room: room }
     };
 
     socket.send(JSON.stringify(packet));
-    addChat("➡️ Joined room: " + room);
+
+    addChat("➡️ Joining room: " + room);
 }
 
-// ===== SEND MESSAGE =====
+// ================= SEND MESSAGE =================
 function sendMsg() {
     const msg = document.getElementById("msg").value;
 
@@ -153,10 +152,11 @@ function sendMsg() {
     };
 
     socket.send(JSON.stringify(packet));
+
     document.getElementById("msg").value = "";
 }
 
-// ===== CHAT DISPLAY (RTF STYLE) =====
+// ================= CHAT DISPLAY =================
 function addChat(text) {
     const box = document.getElementById("chatBox");
 
