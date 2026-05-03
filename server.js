@@ -7,6 +7,8 @@ app.get("/", (req, res) => {
     res.send("✅ A3R BOT IS LIVE ON RAILWAY");
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log("RUNNING ON PORT " + PORT);
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
+    console.log("A3R BOT RUNNING ON PORT " + PORT);
 });
