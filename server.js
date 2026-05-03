@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 
 app.get("/", (req, res) => {
-    res.send("✅ A3R BOT IS LIVE ON RAILWAY");
+    res.sendFile(__dirname + "/public/index.html");
 });
 
 const server = http.createServer(app);
