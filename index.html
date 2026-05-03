@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>A3R Bot Web</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h2>🤖 A3R MAIN BOT LOGIN</h2>
+
+<input id="botId" placeholder="Bot ID">
+<button onclick="loginBot()">Login</button>
+
+<hr>
+
+<h3>Child Bot</h3>
+<input id="childId" placeholder="Child Bot ID">
+<button onclick="createChild()">Create Child Bot</button>
+
+<hr>
+
+<h3>Room Control</h3>
+<input id="room" placeholder="Room Name">
+
+<button onclick="toggleWelcome()">Toggle Welcome</button>
+<button onclick="startQuiz()">Start Quiz</button>
+<button onclick="startCricket()">Start Cricket</button>
+
+<hr>
+
+<h3>Masters</h3>
+<input id="masterName" placeholder="User">
+<button onclick="addMaster()">Add Master</button>
+<button onclick="removeMaster()">Remove Master</button>
+
+<hr>
+
+<pre id="output"></pre>
+
+<script src="app.js"></script>
+
+</body>
+</html>
