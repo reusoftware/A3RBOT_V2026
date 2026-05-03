@@ -11,11 +11,18 @@ async function login() {
 
     const data = await res.json();
 
+    // ✅ CLEAR FEEDBACK
     if (data.ok) {
+        alert("✅ LOGIN SUCCESS: " + data.message);
+
         localStorage.setItem("user", data.user.username);
-        window.location.href = "/dashboard.html";
+
+        setTimeout(() => {
+            window.location.href = "/dashboard.html";
+        }, 800);
+
     } else {
-        alert("❌ Invalid login");
+        alert("❌ LOGIN FAILED: " + data.message);
     }
 }
 </script>
