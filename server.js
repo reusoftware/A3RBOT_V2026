@@ -98,6 +98,8 @@ app.get("/dashboard", (req, res) => {
     res.sendFile(__dirname + "/public/dashboard.html");
 });
 
-app.listen(process.env.PORT || 8080, () => {
-    console.log("A3R BOT RUNNING");
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, "0.0.0.0", () => {
+    console.log("🤖 A3R BOT RUNNING ON PORT " + PORT);
 });
