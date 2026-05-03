@@ -5,54 +5,53 @@ const WebSocket = require("ws");
 const app = express();
 app.use(express.json());
 
+app.get("/", (req, res) => {
+    res.send("✅ A3R BOT IS LIVE ON RAILWAY");
+});
+
 const server = http.createServer(app);
+
+// IMPORTANT: attach WS to SAME server
 const wss = new WebSocket.Server({ server, path: "/server" });
 
-let clients = {};
-
 wss.on("connection", (ws) => {
-    console.log("Bot connected");
+    console.log("Client connected");
 
     ws.on("message", (msg) => {
-        const data = JSON.parse(msg);
+        try {
+            const data = JSON.parse(msg);
 
-        // ===== LOGIN HANDLER (like your 3rd_login) =====
-        if (data.handler === "3rd_login") {
-            const { username, password, api_key } = data.payload;
+            if (data.handler === "3rd_login") {
+                const { username, password, api_key } = data.payload;
 
-            if (api_key !== "xYn86hjOpJk$") {
-                ws.send(JSON.stringify({
-                    handler: "login_result",
-                    ok: false,
-                    message: "Invalid API key"
-                }));
-                return;
-            }
-
-            // fake auth (replace with DB later)
-            if (username && password) {
-                clients[username] = ws;
+                if (api_key !== "xYn86hjOpJk$") {
+                    ws.send(JSON.stringify({
+                        handler: "login_result",
+                        ok: false,
+                        message: "Invalid API key"
+                    }));
+                    return;
+                }
 
                 ws.send(JSON.stringify({
                     handler: "login_result",
                     ok: true,
-                    username: username
-                }));
-            } else {
-                ws.send(JSON.stringify({
-                    handler: "login_result",
-                    ok: false,
-                    message: "Invalid credentials"
+                    username
                 }));
             }
+        } catch (e) {
+            console.log("Error:", e.message);
         }
-    });
-
-    ws.on("close", () => {
-        console.log("Bot disconnected");
     });
 });
 
-server.listen(process.env.PORT || 8080, () => {
-    console.log("A3R WebSocket Bot Running");
+// 🔥 CRITICAL: Railway PORT FIX
+const PORT = process.env.PORT;
+
+if (!PORT) {
+    console.log("PORT missing - using fallback 8080");
+}
+
+server.listen(PORT || 8080, () => {
+    console.log("A3R BOT RUNNING ON PORT", PORT || 8080);
 });
