@@ -94,54 +94,47 @@ function login() {
         }));
     };
 
-    socket.onmessage = (event) => {
-        logRaw(event.data);
+  socket.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    console.log(msg);
 
-        let msg;
-        try { msg = JSON.parse(event.data); } catch { return; }
+    logMessage("RAW: " + JSON.stringify(msg));
 
-        // ✅ LOGIN SUCCESS
-        if (msg.handler === "3rd_login" && msg.status === "success") {
-            document.getElementById("loginBox").style.display = "none";
-            document.getElementById("main").style.display = "block";
-            return;
-        }
+    switch(msg.handler) {
 
-        // ✅ ROOM JOIN SUCCESS
-        if (msg.handler === "join_room" && msg.status === "success") {
-            logChat("✅ Joined room: " + currentRoom);
-            return;
-        }
+        case "3rd_login":
+            status.innerText = "Login OK";
+            break;
 
-        // ✅ ROOM MESSAGE
-        if (msg.handler === "room_msg") {
-            logChat(msg.username + ": " + msg.body);
-            return;
-        }
+        case "join_room":
+            if(msg.status === "success") {
 
-        // ✅ USER JOIN/LEAVE
-        if (msg.handler === "user_join") {
-            logChat("🟢 " + msg.username + " joined");
-            return;
-        }
+                updateUsers(msg.members.map(m => m.username));
+                subject.innerText = msg.subject || "No subject";
+            }
+            break;
 
-        if (msg.handler === "user_leave") {
-            logChat("🔴 " + msg.username + " left");
-            return;
-        }
+        case "room_lists":
+            updateUsers(msg.online || []);
+            break;
 
-        // ✅ BUZZ
-        if (msg.handler === "new_buzz") {
-            logBuzz(msg.data.username + ": " + msg.data.content);
-            return;
-        }
+        case "room_presence":
+            logMessage("👤 " + msg.username + " " + msg.status);
+            break;
 
-    };
+        case "room_msg":
+            const m = msg.message;
+            addChat("💬 " + m.sender + ": " + m.body);
+            break;
 
-    socket.onerror = () => {
-        status.innerText = "❌ Connection error";
-    };
-}
+        case "new_buzz":
+            logMessage("📢 " + msg.data.username + ": " + msg.data.content);
+            break;
+
+        default:
+            logMessage("UNKNOWN: " + msg.handler);
+    }
+};
 
 function joinRoom() {
     const room = document.getElementById("roomName").value;
