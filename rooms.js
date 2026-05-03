@@ -1,14 +1,12 @@
-const rooms = {};
+exports.rooms = {};
 
-function initRoom(room) {
-    if (!rooms[room]) {
-        rooms[room] = {
+exports.initRoom = (room) => {
+    if (!exports.rooms[room]) {
+        exports.rooms[room] = {
             welcome: false,
+            masters: [],
             quiz: null,
-            cricket: null,
-            masters: []
+            cricket: null
         };
     }
-}
-
-module.exports = { rooms, initRoom };
+};
