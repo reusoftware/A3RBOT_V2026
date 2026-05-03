@@ -16,7 +16,7 @@
     <p id="status"></p>
 </div>
 
-<!-- MAIN PANEL -->
+<!-- MAIN -->
 <div id="main" style="display:none">
 
     <h3>ROOM</h3>
@@ -25,7 +25,7 @@
 
     <br><br>
 
-    <textarea id="chatBox" style="width:100%;height:150px" placeholder="Room Chat"></textarea>
+    <textarea id="chatBox" style="width:100%;height:150px"></textarea>
 
     <br>
 
@@ -39,8 +39,13 @@
 
     <hr>
 
-    <h3>RAW RESPONSE</h3>
+    <h3>RAW</h3>
     <textarea id="rawBox" style="width:100%;height:120px"></textarea>
+
+    <hr>
+
+    <h3>USERS</h3>
+    <textarea id="userBox" style="width:100%;height:120px"></textarea>
 
 </div>
 
@@ -49,40 +54,45 @@
 let socket;
 let currentRoom = "";
 
-function logRaw(text) {
-    const box = document.getElementById("rawBox");
-    box.value += text + "\n";
-    box.scrollTop = box.scrollHeight;
+function $(id) {
+    return document.getElementById(id);
 }
 
-function logChat(text) {
-    const box = document.getElementById("chatBox");
-    box.value += text + "\n";
-    box.scrollTop = box.scrollHeight;
+function logRaw(t) {
+    $("rawBox").value += t + "\n";
+    $("rawBox").scrollTop = $("rawBox").scrollHeight;
 }
 
-function logBuzz(text) {
-    const box = document.getElementById("buzzBox");
-    box.value += text + "\n";
-    box.scrollTop = box.scrollHeight;
+function logChat(t) {
+    $("chatBox").value += t + "\n";
+    $("chatBox").scrollTop = $("chatBox").scrollHeight;
+}
+
+function logBuzz(t) {
+    $("buzzBox").value += t + "\n";
+    $("buzzBox").scrollTop = $("buzzBox").scrollHeight;
+}
+
+function logUsers(list) {
+    $("userBox").value = list.join("\n");
 }
 
 function login() {
-    const username = document.getElementById("user").value;
-    const password = document.getElementById("pass").value;
-    const status = document.getElementById("status");
+
+    const username = $("user").value;
+    const password = $("pass").value;
 
     if (!username || !password) {
-        status.innerText = "❌ Enter credentials";
+        $("status").innerText = "❌ Enter credentials";
         return;
     }
 
-    status.innerText = "⏳ Connecting...";
+    $("status").innerText = "⏳ Connecting...";
 
     socket = new WebSocket("wss://viberschat.space:8443/server");
 
     socket.onopen = () => {
-        status.innerText = "🔐 Logging in...";
+        $("status").innerText = "🔐 Logging in...";
 
         socket.send(JSON.stringify({
             handler: "3rd_login",
@@ -94,68 +104,86 @@ function login() {
         }));
     };
 
-  socket.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    console.log(msg);
+    socket.onmessage = (e) => {
 
-    logMessage("RAW: " + JSON.stringify(msg));
+        let msg;
 
-    switch(msg.handler) {
+        try {
+            msg = JSON.parse(e.data);
+        } catch {
+            logRaw("INVALID: " + e.data);
+            return;
+        }
 
-        case "3rd_login":
-            status.innerText = "Login OK";
-            break;
+        logRaw(JSON.stringify(msg));
 
-        case "join_room":
-            if(msg.status === "success") {
+        // LOGIN RESULT
+        if (msg.handler === "3rd_login") {
 
-                updateUsers(msg.members.map(m => m.username));
-                subject.innerText = msg.subject || "No subject";
+            if (msg.status === "success") {
+                $("status").innerText = "✅ LOGIN SUCCESS";
+
+                $("loginBox").style.display = "none";
+                $("main").style.display = "block";
+
+            } else {
+                $("status").innerText = "❌ LOGIN FAILED";
             }
-            break;
+        }
 
-        case "room_lists":
-            updateUsers(msg.online || []);
-            break;
+        // JOIN ROOM
+        if (msg.handler === "join_room" && msg.status === "success") {
 
-        case "room_presence":
-            logMessage("👤 " + msg.username + " " + msg.status);
-            break;
+            logChat("📥 Joined room");
+            logUsers(msg.members.map(m => m.username));
+        }
 
-        case "room_msg":
+        // ROOM USERS UPDATE
+        if (msg.handler === "room_lists") {
+            logUsers(msg.online || []);
+        }
+
+        // PRESENCE
+        if (msg.handler === "room_presence") {
+            logChat("👤 " + msg.username + " " + msg.status);
+        }
+
+        // ROOM MESSAGE
+        if (msg.handler === "room_msg") {
             const m = msg.message;
-            addChat("💬 " + m.sender + ": " + m.body);
-            break;
+            logChat("💬 " + m.sender + ": " + m.body);
+        }
 
-        case "new_buzz":
-            logMessage("📢 " + msg.data.username + ": " + msg.data.content);
-            break;
+        // BUZZ
+        if (msg.handler === "new_buzz") {
+            const b = msg.data;
+            logBuzz("📢 " + b.username + ": " + b.content);
+        }
+    };
 
-        default:
-            logMessage("UNKNOWN: " + msg.handler);
-    }
-};
+    socket.onerror = () => {
+        $("status").innerText = "❌ SOCKET ERROR";
+    };
+}
 
 function joinRoom() {
-    const room = document.getElementById("roomName").value;
 
+    const room = $("roomName").value;
     if (!room) return;
 
     currentRoom = room;
 
     socket.send(JSON.stringify({
         handler: "join_room",
-        payload: {
-            room_name: room
-        }
+        payload: { room_name: room }
     }));
 
-    logChat("➡️ Joining: " + room);
+    logChat("➡️ Joining " + room);
 }
 
 function sendMsg() {
-    const text = document.getElementById("msg").value;
 
+    const text = $("msg").value;
     if (!text || !currentRoom) return;
 
     socket.send(JSON.stringify({
