@@ -1,10 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>A3R BOT</title>
+<title>🤖 A3R BOT</title>
+<style>
+body { font-family: Arial; background:#f5f5f5; }
+
+#chatBox, #buzzBox, #rawBox {
+    width:100%;
+    height:150px;
+    overflow:auto;
+}
+
+.msg {
+    margin:5px 0;
+    padding:5px;
+    background:#fff;
+    border-radius:5px;
+}
+
+.join { color:green; font-weight:bold; }
+.leave { color:darkgreen; font-weight:bold; }
+.system { color:#444; }
+</style>
 </head>
 
-<body style="font-family:Arial">
+<body>
 
 <h2>🤖 A3R BOT</h2>
 
@@ -19,33 +39,29 @@
 <!-- MAIN -->
 <div id="main" style="display:none">
 
-    <h3>ROOM</h3>
-    <input id="roomName" placeholder="Room name">
-    <button onclick="joinRoom()">JOIN ROOM</button>
+<h3>ROOM</h3>
+<input id="roomName" placeholder="Room name">
+<button onclick="joinRoom()">JOIN</button>
 
-    <br><br>
+<h4 id="subject"></h4>
+<div id="users"></div>
 
-    <textarea id="chatBox" style="width:100%;height:150px"></textarea>
+<hr>
 
-    <br>
+<div id="chatBox"></div>
 
-    <input id="msg" placeholder="Message">
-    <button onclick="sendMsg()">SEND</button>
+<input id="msg" placeholder="Message">
+<button onclick="sendMsg()">SEND</button>
 
-    <hr>
+<hr>
 
-    <h3>BUZZ</h3>
-    <textarea id="buzzBox" style="width:100%;height:120px"></textarea>
+<h3>BUZZ</h3>
+<div id="buzzBox"></div>
 
-    <hr>
+<hr>
 
-    <h3>RAW</h3>
-    <textarea id="rawBox" style="width:100%;height:120px"></textarea>
-
-    <hr>
-
-    <h3>USERS</h3>
-    <textarea id="userBox" style="width:100%;height:120px"></textarea>
+<h3>RAW</h3>
+<textarea id="rawBox"></textarea>
 
 </div>
 
@@ -54,147 +70,191 @@
 let socket;
 let currentRoom = "";
 
-function $(id) {
-    return document.getElementById(id);
+const DEFAULT_AVATAR = "https://i.imgur.com/8Km9tLL.png";
+
+// ---------------- UI HELPERS ----------------
+function raw(data){
+    const box = document.getElementById("rawBox");
+    box.value += data + "\n";
+    box.scrollTop = box.scrollHeight;
 }
 
-function logRaw(t) {
-    $("rawBox").value += t + "\n";
-    $("rawBox").scrollTop = $("rawBox").scrollHeight;
+function addChat(html){
+    const box = document.getElementById("chatBox");
+    box.innerHTML += `<div class="msg">${html}</div>`;
+    box.scrollTop = box.scrollHeight;
 }
 
-function logChat(t) {
-    $("chatBox").value += t + "\n";
-    $("chatBox").scrollTop = $("chatBox").scrollHeight;
+function addBuzz(html){
+    const box = document.getElementById("buzzBox");
+    box.innerHTML += `<div class="msg">${html}</div>`;
+    box.scrollTop = box.scrollHeight;
 }
 
-function logBuzz(t) {
-    $("buzzBox").value += t + "\n";
-    $("buzzBox").scrollTop = $("buzzBox").scrollHeight;
-}
+// ---------------- LOGIN ----------------
+function login(){
 
-function logUsers(list) {
-    $("userBox").value = list.join("\n");
-}
-
-function login() {
-
-    const username = $("user").value;
-    const password = $("pass").value;
-
-    if (!username || !password) {
-        $("status").innerText = "❌ Enter credentials";
-        return;
-    }
-
-    $("status").innerText = "⏳ Connecting...";
+    const u = user.value;
+    const p = pass.value;
+    status.innerText = "Connecting...";
 
     socket = new WebSocket("wss://viberschat.space:8443/server");
 
     socket.onopen = () => {
-        $("status").innerText = "🔐 Logging in...";
-
         socket.send(JSON.stringify({
-            handler: "3rd_login",
-            payload: {
-                username,
-                password,
-                api_key: "xYn86hjOpJk$"
+            handler:"3rd_login",
+            payload:{
+                username:u,
+                password:p,
+                api_key:"xYn86hjOpJk$"
             }
         }));
     };
 
-    socket.onmessage = (e) => {
+    socket.onmessage = (e)=>{
+        let msg = JSON.parse(e.data);
+        raw(JSON.stringify(msg));
 
-        let msg;
+        switch(msg.handler){
 
-        try {
-            msg = JSON.parse(e.data);
-        } catch {
-            logRaw("INVALID: " + e.data);
-            return;
-        }
+        case "3rd_login":
+            document.getElementById("loginBox").style.display="none";
+            document.getElementById("main").style.display="block";
+            status.innerText = "Login success";
+            break;
 
-        logRaw(JSON.stringify(msg));
+        // ---------------- ROOM JOIN ----------------
+        case "join_room":
+            if(msg.status=="success"){
 
-        // LOGIN RESULT
-        if (msg.handler === "3rd_login") {
+                subject.innerText = "📌 " + msg.subject;
 
-            if (msg.status === "success") {
-                $("status").innerText = "✅ LOGIN SUCCESS";
+                let html = "<b>👥 Members:</b><br>";
+                msg.members.forEach(m=>{
+                    html += "• " + m.username + " (" + m.role + ")<br>";
+                });
 
-                $("loginBox").style.display = "none";
-                $("main").style.display = "block";
-
-            } else {
-                $("status").innerText = "❌ LOGIN FAILED";
+                users.innerHTML = html;
+                addChat("🏠 Joined room successfully");
             }
+            break;
+
+        // ---------------- JOIN / LEAVE ----------------
+        case "room_presence":
+
+            if(msg.status=="update"){
+                addChat(`<span class="join">🟢 ${msg.username} joined the room</span>`);
+            }
+
+            if(msg.status=="left"){
+                addChat(`<span class="leave">🔴 ${msg.username} left the room</span>`);
+            }
+            break;
+
+        // ---------------- MESSAGE ----------------
+        case "room_msg":
+            renderMessage(msg.message);
+            break;
+
+        // ---------------- BUZZ ----------------
+        case "new_buzz":
+            renderBuzz(msg.data);
+            break;
         }
-
-        // JOIN ROOM
-        if (msg.handler === "join_room" && msg.status === "success") {
-
-            logChat("📥 Joined room");
-            logUsers(msg.members.map(m => m.username));
-        }
-
-        // ROOM USERS UPDATE
-        if (msg.handler === "room_lists") {
-            logUsers(msg.online || []);
-        }
-
-        // PRESENCE
-        if (msg.handler === "room_presence") {
-            logChat("👤 " + msg.username + " " + msg.status);
-        }
-
-        // ROOM MESSAGE
-        if (msg.handler === "room_msg") {
-            const m = msg.message;
-            logChat("💬 " + m.sender + ": " + m.body);
-        }
-
-        // BUZZ
-        if (msg.handler === "new_buzz") {
-            const b = msg.data;
-            logBuzz("📢 " + b.username + ": " + b.content);
-        }
-    };
-
-    socket.onerror = () => {
-        $("status").innerText = "❌ SOCKET ERROR";
     };
 }
 
-function joinRoom() {
+// ---------------- MESSAGE RENDER ----------------
+function renderMessage(m){
 
-    const room = $("roomName").value;
-    if (!room) return;
+    if(!m) return;
 
-    currentRoom = room;
+    let avatar = m.avatar_url || DEFAULT_AVATAR;
+    let text = m.body || "";
+    let html = `<b>${m.sender}</b>: ${text}`;
 
-    socket.send(JSON.stringify({
-        handler: "join_room",
-        payload: { room_name: room }
-    }));
+    // IMAGE / AUDIO
+    if(m.attachments && m.attachments.length){
 
-    logChat("➡️ Joining " + room);
+        m.attachments.forEach(url=>{
+
+            if(url.match(/\.(jpg|jpeg|png|gif)/i)){
+                html += `<br><img src="${url}" width="150">`;
+            }
+
+            else if(url.match(/\.(mp3|aac|wav|webm|ogg)/i)){
+                html += `<br>
+                🎧 <audio controls src="${url}"></audio>`;
+            }
+
+            else {
+                html += `<br>📎 <a href="${url}" target="_blank">file</a>`;
+            }
+        });
+    }
+
+    addChat(html);
 }
 
-function sendMsg() {
+// ---------------- BUZZ ----------------
+function renderBuzz(b){
 
-    const text = $("msg").value;
-    if (!text || !currentRoom) return;
+    if(!b) return;
+
+    let html =
+    `<b>🔥 ${b.username}</b><br>
+    ${b.content}<br>
+    ❤️ ${b.likes_count || 0}<br>`;
+
+    if(b.attachments){
+        b.attachments.forEach(a=>{
+
+            if(a.match(/\.(jpg|png|jpeg|gif)/i)){
+                html += `<br><img src="${a}" width="150">`;
+            }
+
+            else if(a.match(/\.(mp3|aac|wav)/i)){
+                html += `<br><audio controls src="${a}"></audio>`;
+            }
+
+            else {
+                html += `<br>📎 ${a}`;
+            }
+        });
+    }
+
+    addBuzz(html);
+}
+
+// ---------------- JOIN ROOM ----------------
+function joinRoom(){
+
+    currentRoom = roomName.value;
 
     socket.send(JSON.stringify({
-        handler: "room_msg",
-        payload: {
-            room_name: currentRoom,
-            body: text
+        handler:"join_room",
+        payload:{
+            room_name:currentRoom
         }
     }));
 
-    logChat("ME: " + text);
+    addChat("➡️ Joining " + currentRoom);
+}
+
+// ---------------- SEND MESSAGE ----------------
+function sendMsg(){
+
+    if(!msg.value || !currentRoom) return;
+
+    socket.send(JSON.stringify({
+        handler:"room_msg",
+        payload:{
+            room_name:currentRoom,
+            body:msg.value
+        }
+    }));
+
+    addChat("ME: " + msg.value);
 }
 
 </script>
