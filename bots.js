@@ -1,3 +1,8 @@
 const bots = {};
 
-module.exports = bots;
+module.exports = {
+    A3R_MAIN: {
+        password: "bot123",
+        children: []
+    }
+};
