@@ -328,6 +328,8 @@ function sendMsg(){
 // ================= QUIZ ENGINE =================
 function nextQuestion(){
 
+    clearInterval(repeatTimer); // 🔥 important
+
     let a = Math.floor(Math.random()*20);
     let b = Math.floor(Math.random()*20);
 
@@ -335,11 +337,13 @@ function nextQuestion(){
     questionStartTime = Date.now();
 
     repeatCount = 0;
-   // answeredThisRound.clear();
+    answeredThisRound.clear();
 
     sendBot(`🧠 QUIZ: ${a} + ${b} = ?`);
 
     repeatTimer = setInterval(()=>{
+
+        if(currentAnswer === null) return; // 🛑 stop if answered
 
         repeatCount++;
 
@@ -350,6 +354,8 @@ function nextQuestion(){
             clearInterval(repeatTimer);
 
             sendBot(`❌ Time up! Answer: ${currentAnswer}`);
+
+            currentAnswer = null;
 
             setTimeout(nextQuestion, 5000);
         }
