@@ -231,9 +231,16 @@ if(text === "top"){
                     // ⚡ SPEED SCORE
                     let score = 0;
 
-                    if(timeTaken <= 2) score = 10;
-                    else if(timeTaken <= 5) score = 7;
-                    else if(timeTaken <= 8) score = 5;
+                    if(timeTaken <= 1) score = 1000;
+                        else if(timeTaken <= 2) score =800;
+                            else if(timeTaken <= 3) score =700;
+                                else if(timeTaken <= 4) score = 500;
+                                    else if(timeTaken <= 5) score = 500;
+                                        else if(timeTaken <= 6) score = 100;
+                    else if(timeTaken <= 7) score = 70;
+                    else if(timeTaken <= 8) score = 50;
+                        else if(timeTaken <= 9) score = 40;
+                            else if(timeTaken <= 10) score = 10;
                     else score = 3;
 
                     if(!userScores[m.sender]){
@@ -253,7 +260,7 @@ if(!userBestSpeed[m.sender] || timeTaken < userBestSpeed[m.sender]){
                         `🎉 ${m.sender} correct in ${timeTaken.toFixed(2)}s (+${score}) | Total: ${userScores[m.sender]}`
                     );
 
-                    setTimeout(nextQuestion, 4000);
+                    setTimeout(nextQuestion, 5000);
                 }
             }
 
@@ -334,7 +341,7 @@ function nextQuestion(){
             return;
         }
 
-        sendBot(`⏳ QUIZ AGAIN: ${a} + ${b} = ?`);
+        sendBot(`⏳ QUIZ REPOST : ${a} + ${b} = ?`);
 
     },20000);
 }
