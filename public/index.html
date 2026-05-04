@@ -8,7 +8,7 @@ body { font-family: Arial; background:#f5f5f5; }
 
 #chatBox, #buzzBox {
     width:100%;
-    height:200px;
+    height:220px;
     overflow:auto;
     background:white;
     padding:5px;
@@ -20,6 +20,8 @@ body { font-family: Arial; background:#f5f5f5; }
 .leave { color:darkgreen; font-weight:bold; }
 
 .controls { margin:10px 0; }
+
+img { border-radius:8px; }
 </style>
 </head>
 
@@ -39,8 +41,8 @@ body { font-family: Arial; background:#f5f5f5; }
 <div id="main" style="display:none">
 
 <div class="controls">
-<label><input type="checkbox" id="welcomeToggle" checked> Welcome Message</label>
-<label><input type="checkbox" id="mathToggle"> Math Quiz</label>
+<label><input type="checkbox" id="welcomeToggle" checked> Welcome</label>
+<label><input type="checkbox" id="mathToggle" onchange="toggleMath()"> Math Quiz</label>
 </div>
 
 <h3>ROOM</h3>
@@ -57,7 +59,6 @@ body { font-family: Arial; background:#f5f5f5; }
 <input id="msg">
 <button onclick="sendMsg()">SEND</button>
 
-<!-- EMOJI -->
 <select onchange="addEmoji(this.value)">
 <option value="">😊 Emoji</option>
 <option>😀</option>
@@ -81,6 +82,7 @@ body { font-family: Arial; background:#f5f5f5; }
 let socket;
 let currentRoom = "";
 let myUsername = "";
+let mathInterval = null;
 
 // ---------------- HELPERS ----------------
 function addChat(html){
@@ -91,6 +93,21 @@ function addChat(html){
 function addBuzz(html){
     buzzBox.innerHTML += `<div class="msg">${html}</div>`;
     buzzBox.scrollTop = buzzBox.scrollHeight;
+}
+
+function fixURL(url){
+    if(url.startsWith("http://")){
+        return url.replace("http://","https://");
+    }
+    return url;
+}
+
+function getYouTubeEmbed(url){
+    let match = url.match(/(?:youtube\.com.*v=|youtu\.be\/)([^&]+)/);
+    if(match){
+        return "https://www.youtube.com/embed/" + match[1];
+    }
+    return null;
 }
 
 // ---------------- LOGIN ----------------
@@ -133,30 +150,30 @@ function login(){
             users.innerHTML = list;
             break;
 
-        // ---------------- JOIN / LEAVE ----------------
+        // JOIN / LEAVE
         case "room_presence":
 
             if(!welcomeToggle.checked) return;
 
             if(msg.status=="update"){
-                addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
+                addChat(`<span class="join">🟢 ${msg.username} joined the room</span>`);
             }
 
             if(msg.status=="left"){
-                addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
+                addChat(`<span class="leave">🔴 ${msg.username} left the room</span>`);
             }
             break;
 
-        // ---------------- MESSAGE ----------------
+        // MESSAGE
         case "room_msg":
 
-            // ❌ FIX DUPLICATE
+            // prevent duplicate
             if(msg.message.sender === myUsername) return;
 
             renderMessage(msg.message);
             break;
 
-        // ---------------- BUZZ ----------------
+        // BUZZ
         case "new_buzz":
             renderBuzz(msg.data);
             break;
@@ -173,21 +190,34 @@ function renderMessage(m){
 
         m.attachments.forEach(url=>{
 
-            if(url.match(/\.(jpg|png|jpeg|gif)/i)){
-                html += `<br><img src="${url}" width="150">`;
+            let fixed = fixURL(url);
+            let yt = getYouTubeEmbed(url);
+
+            if(yt){
+                html += `<br>
+                <iframe width="250" height="150"
+                src="${yt}" frameborder="0" allowfullscreen></iframe>`;
             }
 
-            else if(url.match(/\.(mp3|aac|wav|ogg)/i)){
-                html += `<br><audio controls src="${url}"></audio>`;
+            else if(fixed.match(/\.(jpg|png|jpeg|gif)/i)){
+                html += `<br><img src="${fixed}" width="150">`;
             }
 
-            else if(url.match(/\.(mp4|webm)/i)){
-                html += `<br><video width="200" controls src="${url}"></video>`;
+            else if(fixed.match(/\.(mp3|aac|wav|ogg)/i)){
+                html += `<br>
+                <audio controls preload="metadata">
+                    <source src="${fixed}">
+                </audio>`;
+            }
+
+            else if(fixed.match(/\.(mp4|webm)/i)){
+                html += `<br><video width="200" controls src="${fixed}"></video>`;
             }
 
             else{
-                html += `<br><a href="${url}" target="_blank">file</a>`;
+                html += `<br><a href="${fixed}" target="_blank">file</a>`;
             }
+
         });
     }
 
@@ -203,21 +233,34 @@ function renderBuzz(b){
 
         b.attachments.forEach(url=>{
 
-            if(url.match(/\.(jpg|png|jpeg|gif)/i)){
-                html += `<br><img src="${url}" width="150">`;
+            let fixed = fixURL(url);
+            let yt = getYouTubeEmbed(url);
+
+            if(yt){
+                html += `<br>
+                <iframe width="250" height="150"
+                src="${yt}" frameborder="0" allowfullscreen></iframe>`;
             }
 
-            else if(url.match(/\.(mp3|aac|wav|ogg)/i)){
-                html += `<br><audio controls src="${url}"></audio>`;
+            else if(fixed.match(/\.(jpg|png|jpeg|gif)/i)){
+                html += `<br><img src="${fixed}" width="150">`;
             }
 
-            else if(url.match(/\.(mp4|webm)/i)){
-                html += `<br><video width="200" controls src="${url}"></video>`;
+            else if(fixed.match(/\.(mp3|aac|wav|ogg)/i)){
+                html += `<br>
+                <audio controls preload="metadata">
+                    <source src="${fixed}">
+                </audio>`;
+            }
+
+            else if(fixed.match(/\.(mp4|webm)/i)){
+                html += `<br><video width="200" controls src="${fixed}"></video>`;
             }
 
             else{
-                html += `<br>${url}`;
+                html += `<br><a href="${fixed}" target="_blank">file</a>`;
             }
+
         });
     }
 
@@ -248,15 +291,49 @@ function sendMsg(){
         }
     }));
 
-    // show ONLY once (ME)
     addChat(`<b>ME</b>: ${text}`);
-
     msg.value="";
 }
 
 // ---------------- EMOJI ----------------
 function addEmoji(e){
     msg.value += e;
+}
+
+// ---------------- MATH QUIZ ----------------
+function startMathQuiz(){
+
+    if(mathInterval) return;
+
+    mathInterval = setInterval(()=>{
+
+        let a = Math.floor(Math.random()*10);
+        let b = Math.floor(Math.random()*10);
+
+        let question = `${a} + ${b} = ?`;
+
+        socket.send(JSON.stringify({
+            handler:"room_msg",
+            payload:{
+                room_name: currentRoom,
+                body: "🧠 QUIZ: " + question
+            }
+        }));
+
+    }, 15000);
+}
+
+function stopMathQuiz(){
+    clearInterval(mathInterval);
+    mathInterval = null;
+}
+
+function toggleMath(){
+    if(mathToggle.checked){
+        startMathQuiz();
+    } else {
+        stopMathQuiz();
+    }
 }
 
 </script>
