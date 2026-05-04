@@ -75,29 +75,28 @@ body { font-family: Arial; background:#f5f5f5; }
 let socket;
 let currentRoom = "";
 let myUsername = "";
-let answeredThisRound = new Set();
-let lastAnswerTime = {};
-let cooldown = 2000; // 2 sec spam protection
-// ---------------- QUIZ SYSTEM ----------------
+
+// ================= QUIZ STATE =================
 let quizActive = false;
 let currentAnswer = null;
 let questionStartTime = 0;
+
 let repeatTimer = null;
 let repeatCount = 0;
 let maxRepeats = 5;
 
-let userScores = {};      // total score
-let userBestSpeed = {};   // fastest time (seconds)
+// 🧠 MODE CONTROL (NORMAL / BATTLE)
+let quizMode = "normal";
 
-// ---------------- UI ----------------
-function addChat(html){
-    chatBox.innerHTML += `<div class="msg">${html}</div>`;
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
+// ================= PLAYER DATA =================
+let userScores = {};
+let userBestSpeed = {};
+let lastAnswerTime = {};
 
-function updateUsers(list){
-    users.innerHTML = list.map(u => u).join("<br>");
-}
+let cooldown = 2000;
+let answeredThisRound = new Set();
+
+// ================= LOCAL STORAGE =================
 function loadData(){
     userScores = JSON.parse(localStorage.getItem("scores") || "{}");
     userBestSpeed = JSON.parse(localStorage.getItem("speed") || "{}");
@@ -107,7 +106,18 @@ function saveData(){
     localStorage.setItem("scores", JSON.stringify(userScores));
     localStorage.setItem("speed", JSON.stringify(userBestSpeed));
 }
-// ---------------- LOGIN ----------------
+
+// ================= UI =================
+function addChat(html){
+    chatBox.innerHTML += `<div class="msg">${html}</div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function updateUsers(list){
+    users.innerHTML = list.map(u => u).join("<br>");
+}
+
+// ================= LOGIN =================
 function login(){
 
     myUsername = user.value;
@@ -136,7 +146,7 @@ function login(){
             loginBox.style.display="none";
             main.style.display="block";
             status.innerText="Login success";
-                loadData();
+            loadData();
             break;
 
         case "join_room":
@@ -147,142 +157,116 @@ function login(){
             updateUsers(msg.online);
             break;
 
-        // ---------------- JOIN / LEAVE ----------------
+        // ================= JOIN / LEAVE =================
         case "room_presence":
 
             if(msg.username === myUsername) return;
 
             if(msg.status==="update"){
-
                 addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
-
-                let list = users.innerText.split("\n").filter(u => u);
-                if(!list.includes(msg.username)) list.push(msg.username);
-                updateUsers(list);
-
-                if(welcomeToggle.checked){
-                    let arr = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
-                    sendBot(`👋 ${msg.username}, ${arr[Math.floor(Math.random()*arr.length)]}`);
-                }
             }
 
             if(msg.status==="left"){
-
                 addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
-
-                let list = users.innerText.split("\n").filter(u => u !== msg.username);
-                updateUsers(list);
             }
 
         break;
 
-        // ---------------- MESSAGE ----------------
+        // ================= CHAT MESSAGE =================
         case "room_msg":
 
             let m = msg.message;
-
             renderMessage(m);
 
-            // ❌ ignore your own answer
             if(m.sender === myUsername) break;
-let text = (m.body || "").toLowerCase().trim();
 
-// ---------------- COMMAND: MYSCORE ----------------
-if(text === "myscore"){
+            let text = (m.body || "").toLowerCase().trim();
 
-    let score = userScores[m.sender] || 0;
-    let speed = userBestSpeed[m.sender];
+            // ========== COMMAND: MYSCORE ==========
+            if(text === "myscore"){
+                let score = userScores[m.sender] || 0;
+                let speed = userBestSpeed[m.sender];
 
-    if(!speed){
-        sendBot(`📊 ${m.sender}, you have no score yet. Play the quiz!`);
-    } else {
-        sendBot(`📊 ${m.sender} | Score: ${score} | Best Speed: ${speed.toFixed(2)}s`);
-    }
+                sendBot(
+                    speed
+                    ? `📊 ${m.sender} | Score: ${score} | Best: ${speed.toFixed(2)}s`
+                    : `📊 ${m.sender} | Score: ${score} | No speed yet`
+                );
+                return;
+            }
 
-    return;
-}
+            // ========== COMMAND: TOP ==========
+            if(text === "top"){
 
-// ---------------- COMMAND: TOP ----------------
-if(text === "top"){
+                let players = Object.keys(userScores);
 
-    let players = Object.keys(userScores);
+                if(players.length === 0){
+                    sendBot("🏆 No players yet!");
+                    return;
+                }
 
-    if(players.length === 0){
-        sendBot("🏆 No players yet!");
-        return;
-    }
+                players.sort((a,b)=> userScores[b] - userScores[a]);
 
-    // sort by score DESC
-    players.sort((a,b)=> userScores[b] - userScores[a]);
+                let msgTop = "🏆 TOP PLAYERS:\n";
 
-    let topList = players.slice(0,10);
+                players.slice(0,10).forEach((p,i)=>{
+                    msgTop += `${i+1}. ${p} | ${userScores[p]} pts\n`;
+                });
 
-    let msgTop = "🏆 TOP PLAYERS:\n";
+                sendBot(msgTop);
+                return;
+            }
 
-    topList.forEach((p,i)=>{
-        let score = userScores[p];
-        let speed = userBestSpeed[p] ? userBestSpeed[p].toFixed(2)+"s" : "-";
+            // ========== QUIZ ANSWER ==========
+            if(!quizActive || currentAnswer === null) return;
 
-        msgTop += `${i+1}. ${p} | ${score} pts | ⚡ ${speed}\n`;
-    });
+            let ans = parseInt(m.body);
+            if(isNaN(ans)) return;
 
-    sendBot(msgTop);
+            if(answeredThisRound.has(m.sender)) return;
 
-    return;
-}
-            // ---------------- QUIZ CHECK ----------------
-       if(quizActive && currentAnswer !== null){
+            let now = Date.now();
 
-    let userAnswer = parseInt(m.body);
+            if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown)
+                return;
 
-    if(isNaN(userAnswer)) return;
+            if(ans === currentAnswer){
 
-// ❌ already answered this round
-if(answeredThisRound.has(m.sender)) return;
+                answeredThisRound.add(m.sender);
+                lastAnswerTime[m.sender] = now;
 
-// ❌ spam cooldown
-let now = Date.now();
-if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown) return;
+                let timeTaken = (now - questionStartTime) / 1000;
 
-if(userAnswer === currentAnswer){
+                let scoreGain =
+                    timeTaken <= 2 ? 100 :
+                    timeTaken <= 5 ? 70 :
+                    timeTaken <= 8 ? 50 : 30;
 
-    answeredThisRound.add(m.sender);
-    lastAnswerTime[m.sender] = now;
+                userScores[m.sender] = (userScores[m.sender] || 0) + scoreGain;
 
-    let timeTaken = (now - questionStartTime) / 1000;
+                if(!userBestSpeed[m.sender] || timeTaken < userBestSpeed[m.sender]){
+                    userBestSpeed[m.sender] = timeTaken;
+                }
 
-    let score = timeTaken <= 2 ? 100 :
-                timeTaken <= 5 ? 70 :
-                timeTaken <= 8 ? 50 : 30;
+                saveData();
 
-    if(!userScores[m.sender]){
-        userScores[m.sender] = 0;
-        userBestSpeed[m.sender] = 999;
-    }
+                sendBot(
+                    `🏆 ${m.sender} +${scoreGain} pts (${timeTaken.toFixed(2)}s)`
+                );
 
-    userScores[m.sender] += score;
-
-    if(timeTaken < userBestSpeed[m.sender]){
-        userBestSpeed[m.sender] = timeTaken;
-    }
-
-    saveData();
-
-    clearInterval(repeatTimer);
-    currentAnswer = null;
-
-    sendBot(`🏆 ${m.sender} +${score} (${timeTaken.toFixed(2)}s) | Total: ${userScores[m.sender]}`);
-
-    setTimeout(nextQuestion, 4000);
-}
-}
+                // 🧠 BATTLE MODE = instant next question
+                if(quizMode === "battle"){
+                    clearInterval(repeatTimer);
+                    setTimeout(nextQuestion, 3000);
+                }
+            }
 
         break;
         }
     };
 }
 
-// ---------------- BOT SEND ----------------
+// ================= BOT =================
 function sendBot(text){
     socket.send(JSON.stringify({
         handler:"room_msg",
@@ -293,42 +277,12 @@ function sendBot(text){
     }));
 }
 
-// ---------------- MESSAGE ----------------
+// ================= MESSAGE =================
 function renderMessage(m){
     addChat(`<b>${m.sender}</b>: ${m.body || ""}`);
 }
 
-// ---------------- JOIN ----------------
-function joinRoom(){
-
-    currentRoom = roomName.value;
-
-    socket.send(JSON.stringify({
-        handler:"join_room",
-        payload:{ room_name: currentRoom }
-    }));
-}
-
-// ---------------- SEND ----------------
-function sendMsg(){
-
-    socket.send(JSON.stringify({
-        handler:"room_msg",
-        payload:{
-            room_name: currentRoom,
-            body: msg.value
-        }
-    }));
-
-    msg.value="";
-}
-
-// ---------------- EMOJI ----------------
-function addEmoji(e){
-    msg.value += e;
-}
-
-// ---------------- QUIZ ENGINE ----------------
+// ================= QUIZ ENGINE =================
 function nextQuestion(){
 
     let a = Math.floor(Math.random()*20);
@@ -336,7 +290,9 @@ function nextQuestion(){
 
     currentAnswer = a + b;
     questionStartTime = Date.now();
+
     repeatCount = 0;
+    answeredThisRound.clear();
 
     sendBot(`🧠 QUIZ: ${a} + ${b} = ?`);
 
@@ -344,23 +300,21 @@ function nextQuestion(){
 
         repeatCount++;
 
+        sendBot(`⏳ QUIZ: ${a} + ${b} = ?`);
+
         if(repeatCount >= maxRepeats){
 
             clearInterval(repeatTimer);
 
-            sendBot(`❌ Time's up! Answer: ${currentAnswer}`);
+            sendBot(`❌ Time up! Answer: ${currentAnswer}`);
 
             setTimeout(nextQuestion, 5000);
-            answeredThisRound.clear();
-            return;
         }
 
-        sendBot(`⏳ QUIZ REPOST : ${a} + ${b} = ?`);
-
-    },20000);
+    }, 10000);
 }
 
-// ---------------- TOGGLE ----------------
+// ================= TOGGLE =================
 function toggleMath(){
 
     if(mathToggle.checked){
@@ -368,15 +322,26 @@ function toggleMath(){
         if(quizActive) return;
 
         quizActive = true;
-        sendBot("🧠 Quiz Started!");
+        quizMode = "normal";
+
+        sendBot("🧠 Normal Quiz Started!");
         nextQuestion();
 
     } else {
 
         quizActive = false;
         clearInterval(repeatTimer);
+
         sendBot("🛑 Quiz Stopped");
     }
+}
+
+// ================= BATTLE MODE =================
+function enableBattleMode(){
+
+    quizMode = "battle";
+
+    sendBot("🏁 Battle Mode Activated!");
 }
 
 </script>
