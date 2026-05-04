@@ -75,7 +75,9 @@ body { font-family: Arial; background:#f5f5f5; }
 let socket;
 let currentRoom = "";
 let myUsername = "";
-
+let answeredThisRound = new Set();
+let lastAnswerTime = {};
+let cooldown = 2000; // 2 sec spam protection
 // ---------------- QUIZ SYSTEM ----------------
 let quizActive = false;
 let currentAnswer = null;
@@ -96,7 +98,15 @@ function addChat(html){
 function updateUsers(list){
     users.innerHTML = list.map(u => u).join("<br>");
 }
+function loadData(){
+    userScores = JSON.parse(localStorage.getItem("scores") || "{}");
+    userBestSpeed = JSON.parse(localStorage.getItem("speed") || "{}");
+}
 
+function saveData(){
+    localStorage.setItem("scores", JSON.stringify(userScores));
+    localStorage.setItem("speed", JSON.stringify(userBestSpeed));
+}
 // ---------------- LOGIN ----------------
 function login(){
 
@@ -126,6 +136,7 @@ function login(){
             loginBox.style.display="none";
             main.style.display="block";
             status.innerText="Login success";
+                loadData();
             break;
 
         case "join_room":
@@ -220,49 +231,51 @@ if(text === "top"){
     return;
 }
             // ---------------- QUIZ CHECK ----------------
-            if(quizActive && currentAnswer !== null){
+       if(quizActive && currentAnswer !== null){
 
-                let userAnswer = parseInt(m.body);
+    let userAnswer = parseInt(m.body);
 
-                if(!isNaN(userAnswer) && userAnswer === currentAnswer){
+    if(isNaN(userAnswer)) return;
 
-                    let timeTaken = (Date.now() - questionStartTime) / 1000;
+// ❌ already answered this round
+if(answeredThisRound.has(m.sender)) return;
 
-                    // ⚡ SPEED SCORE
-                    let score = 0;
+// ❌ spam cooldown
+let now = Date.now();
+if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown) return;
 
-                    if(timeTaken <= 1) score = 1000;
-                        else if(timeTaken <= 2) score =800;
-                            else if(timeTaken <= 3) score =700;
-                                else if(timeTaken <= 4) score = 500;
-                                    else if(timeTaken <= 5) score = 500;
-                                        else if(timeTaken <= 6) score = 100;
-                    else if(timeTaken <= 7) score = 70;
-                    else if(timeTaken <= 8) score = 50;
-                        else if(timeTaken <= 9) score = 40;
-                            else if(timeTaken <= 10) score = 10;
-                    else score = 3;
+if(userAnswer === currentAnswer){
 
-                    if(!userScores[m.sender]){
-                        userScores[m.sender] = 0;
-                        sendBot(`🎮 ${m.sender} joined the quiz! Score: 0`);
-                    }
+    answeredThisRound.add(m.sender);
+    lastAnswerTime[m.sender] = now;
 
-                    userScores[m.sender] += score;
-// save BEST SPEED (lower = better)
-if(!userBestSpeed[m.sender] || timeTaken < userBestSpeed[m.sender]){
-    userBestSpeed[m.sender] = timeTaken;
+    let timeTaken = (now - questionStartTime) / 1000;
+
+    let score = timeTaken <= 2 ? 100 :
+                timeTaken <= 5 ? 70 :
+                timeTaken <= 8 ? 50 : 30;
+
+    if(!userScores[m.sender]){
+        userScores[m.sender] = 0;
+        userBestSpeed[m.sender] = 999;
+    }
+
+    userScores[m.sender] += score;
+
+    if(timeTaken < userBestSpeed[m.sender]){
+        userBestSpeed[m.sender] = timeTaken;
+    }
+
+    saveData();
+
+    clearInterval(repeatTimer);
+    currentAnswer = null;
+
+    sendBot(`🏆 ${m.sender} +${score} (${timeTaken.toFixed(2)}s) | Total: ${userScores[m.sender]}`);
+
+    setTimeout(nextQuestion, 4000);
 }
-                    clearInterval(repeatTimer);
-                    currentAnswer = null;
-
-                    sendBot(
-                        `🎉 ${m.sender} correct in ${timeTaken.toFixed(2)}s (+${score}) | Total: ${userScores[m.sender]}`
-                    );
-
-                    setTimeout(nextQuestion, 5000);
-                }
-            }
+}
 
         break;
         }
@@ -338,6 +351,7 @@ function nextQuestion(){
             sendBot(`❌ Time's up! Answer: ${currentAnswer}`);
 
             setTimeout(nextQuestion, 5000);
+            answeredThisRound.clear();
             return;
         }
 
