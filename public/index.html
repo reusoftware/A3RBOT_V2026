@@ -237,30 +237,46 @@ function login(){
             let now = Date.now();
             if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown) return;
 
-            if(ans === currentAnswer){
+         if(ans === currentAnswer){
 
-                answeredThisRound.add(m.sender);
-                lastAnswerTime[m.sender] = now;
+    // 🛑 STOP ROUND
+    clearInterval(repeatTimer);
+    currentAnswer = null; // lock question
 
-                let timeTaken = (now - questionStartTime) / 1000;
+    answeredThisRound.add(m.sender);
+    lastAnswerTime[m.sender] = now;
 
-                let scoreGain =
-                    timeTaken <= 2 ? 100 :
-                    timeTaken <= 5 ? 70 :
-                    timeTaken <= 8 ? 50 : 30;
+    let timeTaken = (now - questionStartTime) / 1000;
 
-                userScores[m.sender] = (userScores[m.sender] || 0) + scoreGain;
+    let scoreGain =
+        timeTaken <= 2 ? 100 :
+        timeTaken <= 5 ? 70 :
+        timeTaken <= 8 ? 50 : 30;
 
-                if(!userBestSpeed[m.sender] || timeTaken < userBestSpeed[m.sender]){
-                    userBestSpeed[m.sender] = timeTaken;
-                }
+    // ✅ INIT PLAYER
+    if(!userScores[m.sender]){
+        userScores[m.sender] = 0;
+        userBestSpeed[m.sender] = 999;
+    }
 
-                sendBot(`🏆 ${m.sender} +${scoreGain} (${timeTaken.toFixed(2)}s)`);
+    userScores[m.sender] += scoreGain;
 
-                if(quizMode === "battle"){
-                    clearInterval(repeatTimer);
-                    setTimeout(nextQuestion, 2500);
-                }
+    // ✅ SAVE BEST SPEED
+    if(timeTaken < userBestSpeed[m.sender]){
+        userBestSpeed[m.sender] = timeTaken;
+    }
+
+    // ✅ SHOW FULL RESULT
+    sendBot(
+        `🏆 ${m.sender} +${scoreGain} pts (${timeTaken.toFixed(2)}s)\n` +
+        `📊 Total Score: ${userScores[m.sender]} | Best: ${userBestSpeed[m.sender].toFixed(2)}s`
+    );
+
+    // ✅ NEXT QUESTION (FOR BOTH MODES)
+    setTimeout(()=>{
+        nextQuestion();
+    }, 4000);
+}
             }
 
         break;
@@ -319,7 +335,7 @@ function nextQuestion(){
     questionStartTime = Date.now();
 
     repeatCount = 0;
-    answeredThisRound.clear();
+   // answeredThisRound.clear();
 
     sendBot(`🧠 QUIZ: ${a} + ${b} = ?`);
 
