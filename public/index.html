@@ -72,7 +72,7 @@ body { font-family: Arial; background:#f5f5f5; }
 let socket;
 let currentRoom = "";
 let myUsername = "";
-
+let quizType = "math"; // math or word
 // ================= USERS =================
 let usersList = [];
 
@@ -229,7 +229,17 @@ function login(){
             // ================= QUIZ CHECK =================
             if(!quizActive || currentAnswer === null) return;
 
-            let ans = parseInt(m.body);
+        let userAnswer = m.body.trim().toLowerCase();
+
+let isCorrect = false;
+
+if(quizType === "math"){
+    isCorrect = parseInt(userAnswer) === currentAnswer;
+} else {
+    isCorrect = userAnswer === currentAnswer;
+}
+
+if(!isCorrect) return;
             if(isNaN(ans)) return;
 
           //  if(answeredThisRound.has(m.sender)) return;
@@ -327,26 +337,52 @@ function sendMsg(){
 // ================= QUIZ ENGINE =================
 function nextQuestion(){
 
-    clearInterval(repeatTimer); // 🔥 important
+    clearInterval(repeatTimer);
 
-    let a = Math.floor(Math.random()*20);
-    let b = Math.floor(Math.random()*20);
+    answeredThisRound.clear();
+    repeatCount = 0;
 
-    currentAnswer = a + b;
     questionStartTime = Date.now();
 
-    repeatCount = 0;
-    answeredThisRound.clear();
+    // 🔁 SWITCH MODE
+    quizType = (quizType === "math") ? "word" : "math";
 
-    sendBot(`🧠 QUIZ: ${a} + ${b} = ?`);
+    let questionText = "";
+
+    if(quizType === "math"){
+
+        let a = Math.floor(Math.random()*20);
+        let b = Math.floor(Math.random()*20);
+
+        currentAnswer = a + b;
+        questionText = `🧮 ${a} + ${b} = ?`;
+
+    } else {
+
+        // WORD QUIZ
+        let words = [
+            {q:"Unscramble: 'tca'", a:"cat"},
+            {q:"Opposite of 'hot'?", a:"cold"},
+            {q:"Fill: 2,4,6,?", a:"8"},
+            {q:"What is color of sky?", a:"blue"},
+            {q:"Spell correctly: 'aple'", a:"apple"}
+        ];
+
+        let pick = words[Math.floor(Math.random()*words.length)];
+
+        currentAnswer = pick.a.toLowerCase();
+        questionText = `🧠 WORD: ${pick.q}`;
+    }
+
+    sendBot(questionText);
 
     repeatTimer = setInterval(()=>{
 
-        if(currentAnswer === null) return; // 🛑 stop if answered
+        if(currentAnswer === null) return;
 
         repeatCount++;
 
-        sendBot(`⏳ QUIZ: ${a} + ${b} = ?`);
+        sendBot(`⏳ REPEAT: ${questionText}`);
 
         if(repeatCount >= maxRepeats){
 
@@ -359,9 +395,8 @@ function nextQuestion(){
             setTimeout(nextQuestion, 5000);
         }
 
-    }, 20000);
+    }, 15000);
 }
-
 // ================= TOGGLE =================
 function toggleMath(){
 
