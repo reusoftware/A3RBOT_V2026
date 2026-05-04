@@ -1,26 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>🤖 A3R BOT</title>
+<title>A3R BOT</title>
+
 <style>
 body { font-family: Arial; background:#f5f5f5; }
 
-#chatBox, #buzzBox, #rawBox {
+#chatBox, #buzzBox {
     width:100%;
-    height:150px;
+    height:200px;
     overflow:auto;
+    background:white;
+    padding:5px;
 }
 
-.msg {
-    margin:5px 0;
-    padding:5px;
-    background:#fff;
-    border-radius:5px;
-}
+.msg { margin:5px; }
 
 .join { color:green; font-weight:bold; }
 .leave { color:darkgreen; font-weight:bold; }
-.system { color:#444; }
+
+.controls { margin:10px 0; }
 </style>
 </head>
 
@@ -30,14 +29,19 @@ body { font-family: Arial; background:#f5f5f5; }
 
 <!-- LOGIN -->
 <div id="loginBox">
-    <input id="user" placeholder="Username"><br><br>
-    <input id="pass" type="password" placeholder="Password"><br><br>
-    <button onclick="login()">LOGIN</button>
-    <p id="status"></p>
+<input id="user" placeholder="Username"><br><br>
+<input id="pass" type="password" placeholder="Password"><br><br>
+<button onclick="login()">LOGIN</button>
+<p id="status"></p>
 </div>
 
 <!-- MAIN -->
 <div id="main" style="display:none">
+
+<div class="controls">
+<label><input type="checkbox" id="welcomeToggle" checked> Welcome Message</label>
+<label><input type="checkbox" id="mathToggle"> Math Quiz</label>
+</div>
 
 <h3>ROOM</h3>
 <input id="roomName" placeholder="Room name">
@@ -50,18 +54,25 @@ body { font-family: Arial; background:#f5f5f5; }
 
 <div id="chatBox"></div>
 
-<input id="msg" placeholder="Message">
+<input id="msg">
 <button onclick="sendMsg()">SEND</button>
+
+<!-- EMOJI -->
+<select onchange="addEmoji(this.value)">
+<option value="">😊 Emoji</option>
+<option>😀</option>
+<option>😂</option>
+<option>😍</option>
+<option>🔥</option>
+<option>👍</option>
+<option>🎵</option>
+<option>❤️</option>
+</select>
 
 <hr>
 
 <h3>BUZZ</h3>
 <div id="buzzBox"></div>
-
-<hr>
-
-<h3>RAW</h3>
-<textarea id="rawBox"></textarea>
 
 </div>
 
@@ -69,34 +80,23 @@ body { font-family: Arial; background:#f5f5f5; }
 
 let socket;
 let currentRoom = "";
+let myUsername = "";
 
-const DEFAULT_AVATAR = "https://i.imgur.com/8Km9tLL.png";
-
-// ---------------- UI HELPERS ----------------
-function raw(data){
-    const box = document.getElementById("rawBox");
-    box.value += data + "\n";
-    box.scrollTop = box.scrollHeight;
-}
-
+// ---------------- HELPERS ----------------
 function addChat(html){
-    const box = document.getElementById("chatBox");
-    box.innerHTML += `<div class="msg">${html}</div>`;
-    box.scrollTop = box.scrollHeight;
+    chatBox.innerHTML += `<div class="msg">${html}</div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function addBuzz(html){
-    const box = document.getElementById("buzzBox");
-    box.innerHTML += `<div class="msg">${html}</div>`;
-    box.scrollTop = box.scrollHeight;
+    buzzBox.innerHTML += `<div class="msg">${html}</div>`;
+    buzzBox.scrollTop = buzzBox.scrollHeight;
 }
 
 // ---------------- LOGIN ----------------
 function login(){
 
-    const u = user.value;
-    const p = pass.value;
-    status.innerText = "Connecting...";
+    myUsername = user.value;
 
     socket = new WebSocket("wss://viberschat.space:8443/server");
 
@@ -104,55 +104,55 @@ function login(){
         socket.send(JSON.stringify({
             handler:"3rd_login",
             payload:{
-                username:u,
-                password:p,
+                username:user.value,
+                password:pass.value,
                 api_key:"xYn86hjOpJk$"
             }
         }));
     };
 
     socket.onmessage = (e)=>{
+
         let msg = JSON.parse(e.data);
-        raw(JSON.stringify(msg));
 
         switch(msg.handler){
 
         case "3rd_login":
-            document.getElementById("loginBox").style.display="none";
-            document.getElementById("main").style.display="block";
-            status.innerText = "Login success";
+            loginBox.style.display="none";
+            main.style.display="block";
+            status.innerText="Login success";
             break;
 
-        // ---------------- ROOM JOIN ----------------
         case "join_room":
-            if(msg.status=="success"){
+            subject.innerText = "📌 " + msg.subject;
 
-                subject.innerText = "📌 " + msg.subject;
-
-                let html = "<b>👥 Members:</b><br>";
-                msg.members.forEach(m=>{
-                    html += "• " + m.username + " (" + m.role + ")<br>";
-                });
-
-                users.innerHTML = html;
-                addChat("🏠 Joined room successfully");
-            }
+            let list="";
+            msg.members.forEach(m=>{
+                list += m.username + "<br>";
+            });
+            users.innerHTML = list;
             break;
 
         // ---------------- JOIN / LEAVE ----------------
         case "room_presence":
 
+            if(!welcomeToggle.checked) return;
+
             if(msg.status=="update"){
-                addChat(`<span class="join">🟢 ${msg.username} joined the room</span>`);
+                addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
             }
 
             if(msg.status=="left"){
-                addChat(`<span class="leave">🔴 ${msg.username} left the room</span>`);
+                addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
             }
             break;
 
         // ---------------- MESSAGE ----------------
         case "room_msg":
+
+            // ❌ FIX DUPLICATE
+            if(msg.message.sender === myUsername) return;
+
             renderMessage(msg.message);
             break;
 
@@ -164,31 +164,29 @@ function login(){
     };
 }
 
-// ---------------- MESSAGE RENDER ----------------
+// ---------------- MESSAGE ----------------
 function renderMessage(m){
 
-    if(!m) return;
+    let html = `<b>${m.sender}</b>: ${m.body || ""}`;
 
-    let avatar = m.avatar_url || DEFAULT_AVATAR;
-    let text = m.body || "";
-    let html = `<b>${m.sender}</b>: ${text}`;
-
-    // IMAGE / AUDIO
-    if(m.attachments && m.attachments.length){
+    if(m.attachments){
 
         m.attachments.forEach(url=>{
 
-            if(url.match(/\.(jpg|jpeg|png|gif)/i)){
+            if(url.match(/\.(jpg|png|jpeg|gif)/i)){
                 html += `<br><img src="${url}" width="150">`;
             }
 
-            else if(url.match(/\.(mp3|aac|wav|webm|ogg)/i)){
-                html += `<br>
-                🎧 <audio controls src="${url}"></audio>`;
+            else if(url.match(/\.(mp3|aac|wav|ogg)/i)){
+                html += `<br><audio controls src="${url}"></audio>`;
             }
 
-            else {
-                html += `<br>📎 <a href="${url}" target="_blank">file</a>`;
+            else if(url.match(/\.(mp4|webm)/i)){
+                html += `<br><video width="200" controls src="${url}"></video>`;
+            }
+
+            else{
+                html += `<br><a href="${url}" target="_blank">file</a>`;
             }
         });
     }
@@ -199,26 +197,26 @@ function renderMessage(m){
 // ---------------- BUZZ ----------------
 function renderBuzz(b){
 
-    if(!b) return;
-
-    let html =
-    `<b>🔥 ${b.username}</b><br>
-    ${b.content}<br>
-    ❤️ ${b.likes_count || 0}<br>`;
+    let html = `<b>🔥 ${b.username}</b><br>${b.content}<br>❤️ ${b.likes_count}`;
 
     if(b.attachments){
-        b.attachments.forEach(a=>{
 
-            if(a.match(/\.(jpg|png|jpeg|gif)/i)){
-                html += `<br><img src="${a}" width="150">`;
+        b.attachments.forEach(url=>{
+
+            if(url.match(/\.(jpg|png|jpeg|gif)/i)){
+                html += `<br><img src="${url}" width="150">`;
             }
 
-            else if(a.match(/\.(mp3|aac|wav)/i)){
-                html += `<br><audio controls src="${a}"></audio>`;
+            else if(url.match(/\.(mp3|aac|wav|ogg)/i)){
+                html += `<br><audio controls src="${url}"></audio>`;
             }
 
-            else {
-                html += `<br>📎 ${a}`;
+            else if(url.match(/\.(mp4|webm)/i)){
+                html += `<br><video width="200" controls src="${url}"></video>`;
+            }
+
+            else{
+                html += `<br>${url}`;
             }
         });
     }
@@ -226,35 +224,39 @@ function renderBuzz(b){
     addBuzz(html);
 }
 
-// ---------------- JOIN ROOM ----------------
+// ---------------- JOIN ----------------
 function joinRoom(){
 
     currentRoom = roomName.value;
 
     socket.send(JSON.stringify({
         handler:"join_room",
-        payload:{
-            room_name:currentRoom
-        }
+        payload:{ room_name: currentRoom }
     }));
-
-    addChat("➡️ Joining " + currentRoom);
 }
 
-// ---------------- SEND MESSAGE ----------------
+// ---------------- SEND ----------------
 function sendMsg(){
 
-    if(!msg.value || !currentRoom) return;
+    let text = msg.value;
 
     socket.send(JSON.stringify({
         handler:"room_msg",
         payload:{
-            room_name:currentRoom,
-            body:msg.value
+            room_name: currentRoom,
+            body: text
         }
     }));
 
-    addChat("ME: " + msg.value);
+    // show ONLY once (ME)
+    addChat(`<b>ME</b>: ${text}`);
+
+    msg.value="";
+}
+
+// ---------------- EMOJI ----------------
+function addEmoji(e){
+    msg.value += e;
 }
 
 </script>
