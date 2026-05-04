@@ -76,13 +76,15 @@ let socket;
 let currentRoom = "";
 let myUsername = "";
 
-// QUIZ
+// ---------------- QUIZ SYSTEM ----------------
 let quizActive = false;
 let currentAnswer = null;
-let currentQuestion = "";
+let questionStartTime = 0;
+let repeatTimer = null;
 let repeatCount = 0;
-let quizTimer = null;
-let scores = {};
+let maxRepeats = 5;
+
+let userScores = {};
 
 // ---------------- UI ----------------
 function addChat(html){
@@ -133,64 +135,81 @@ function login(){
             updateUsers(msg.online);
             break;
 
-       case "room_presence":
+        // ---------------- JOIN / LEAVE ----------------
+        case "room_presence":
 
-    // ❌ IGNORE YOURSELF
-    if(msg.username === myUsername) return;
+            if(msg.username === myUsername) return;
 
-    if(msg.status==="update"){
-        addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
+            if(msg.status==="update"){
 
-        let list = users.innerText.split("\n").filter(u => u);
-        if(!list.includes(msg.username)){
-            list.push(msg.username);
-        }
-        updateUsers(list);
+                addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
 
-        if(welcomeToggle.checked){
-            let arr = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
-            sendBot(`👋 ${msg.username}, ${arr[Math.floor(Math.random()*arr.length)]}`);
-        }
-    }
+                let list = users.innerText.split("\n").filter(u => u);
+                if(!list.includes(msg.username)) list.push(msg.username);
+                updateUsers(list);
 
-    if(msg.status==="left"){
-        addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
+                if(welcomeToggle.checked){
+                    let arr = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
+                    sendBot(`👋 ${msg.username}, ${arr[Math.floor(Math.random()*arr.length)]}`);
+                }
+            }
 
-        let list = users.innerText.split("\n").filter(u => u !== msg.username);
-        updateUsers(list);
-    }
+            if(msg.status==="left"){
 
-    break;
+                addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
 
+                let list = users.innerText.split("\n").filter(u => u !== msg.username);
+                updateUsers(list);
+            }
+
+        break;
+
+        // ---------------- MESSAGE ----------------
         case "room_msg":
 
             let m = msg.message;
 
             renderMessage(m);
 
-            // QUIZ CHECK
-           if(quizActive && m.body){
+            // ❌ ignore your own answer
+            if(m.sender === myUsername) break;
 
-    // ❌ IGNORE YOURSELF
-    if(m.sender === myUsername) return;
+            // ---------------- QUIZ CHECK ----------------
+            if(quizActive && currentAnswer !== null){
 
-    let ans = parseInt(m.body.trim());
+                let userAnswer = parseInt(m.body);
 
-    if(ans === currentAnswer){
+                if(!isNaN(userAnswer) && userAnswer === currentAnswer){
 
-        if(!scores[m.sender]){
-            scores[m.sender] = 0;
-            sendBot(`🎉 ${m.sender} joined quiz! Score: 0`);
-        }
+                    let timeTaken = (Date.now() - questionStartTime) / 1000;
 
-        scores[m.sender]++;
-        sendBot(`✅ ${m.sender} correct! Score: ${scores[m.sender]}`);
+                    // ⚡ SPEED SCORE
+                    let score = 0;
 
-        nextQuestion();
-    }
-}
+                    if(timeTaken <= 2) score = 10;
+                    else if(timeTaken <= 5) score = 7;
+                    else if(timeTaken <= 8) score = 5;
+                    else score = 3;
 
-            break;
+                    if(!userScores[m.sender]){
+                        userScores[m.sender] = 0;
+                        sendBot(`🎮 ${m.sender} joined the quiz! Score: 0`);
+                    }
+
+                    userScores[m.sender] += score;
+
+                    clearInterval(repeatTimer);
+                    currentAnswer = null;
+
+                    sendBot(
+                        `🎉 ${m.sender} correct in ${timeTaken.toFixed(2)}s (+${score}) | Total: ${userScores[m.sender]}`
+                    );
+
+                    setTimeout(nextQuestion, 4000);
+                }
+            }
+
+        break;
         }
     };
 }
@@ -208,7 +227,7 @@ function sendBot(text){
 
 // ---------------- MESSAGE ----------------
 function renderMessage(m){
-    addChat(`<b>${m.sender}</b>: ${m.body}`);
+    addChat(`<b>${m.sender}</b>: ${m.body || ""}`);
 }
 
 // ---------------- JOIN ----------------
@@ -241,43 +260,35 @@ function addEmoji(e){
     msg.value += e;
 }
 
-// ---------------- QUIZ ----------------
-function generateQuestion(){
+// ---------------- QUIZ ENGINE ----------------
+function nextQuestion(){
 
     let a = Math.floor(Math.random()*20);
     let b = Math.floor(Math.random()*20);
 
     currentAnswer = a + b;
-    currentQuestion = `${a} + ${b} = ?`;
-
+    questionStartTime = Date.now();
     repeatCount = 0;
 
-    askLoop();
-}
+    sendBot(`🧠 QUIZ: ${a} + ${b} = ?`);
 
-function askLoop(){
-
-    quizTimer = setInterval(()=>{
+    repeatTimer = setInterval(()=>{
 
         repeatCount++;
 
-        sendBot(`🧠 QUIZ: ${currentQuestion}`);
+        if(repeatCount >= maxRepeats){
 
-        if(repeatCount >= 5){
+            clearInterval(repeatTimer);
 
-            clearInterval(quizTimer);
+            sendBot(`❌ Time's up! Answer: ${currentAnswer}`);
 
-            sendBot(`⏰ Answer: ${currentAnswer}`);
-
-            setTimeout(generateQuestion,10000);
+            setTimeout(nextQuestion, 5000);
+            return;
         }
 
-    },20000);
-}
+        sendBot(`⏳ QUIZ AGAIN: ${a} + ${b} = ?`);
 
-function nextQuestion(){
-    clearInterval(quizTimer);
-    setTimeout(generateQuestion,10000);
+    },10000);
 }
 
 // ---------------- TOGGLE ----------------
@@ -285,14 +296,16 @@ function toggleMath(){
 
     if(mathToggle.checked){
 
+        if(quizActive) return;
+
         quizActive = true;
         sendBot("🧠 Quiz Started!");
-        generateQuestion();
+        nextQuestion();
 
     } else {
 
         quizActive = false;
-        clearInterval(quizTimer);
+        clearInterval(repeatTimer);
         sendBot("🛑 Quiz Stopped");
     }
 }
