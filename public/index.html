@@ -72,29 +72,38 @@ body { font-family: Arial; background:#f5f5f5; }
 let socket;
 let currentRoom = "";
 let myUsername = "";
-let quizType = "math"; // math or word
+let quizType = "math";
+
 // ================= USERS =================
 let usersList = [];
 
 // ================= QUIZ =================
 let quizActive = false;
-let quizMode = "normal";
-
 let currentAnswer = null;
 let questionStartTime = 0;
 
 let repeatTimer = null;
 let repeatCount = 0;
-
 let maxRepeats = 5;
 
-let answeredThisRound = new Set();
 let lastAnswerTime = {};
 let cooldown = 1500;
 
 // ================= SCORES =================
 let userScores = {};
 let userBestSpeed = {};
+
+// ================= WORD BANK =================
+const wordBank = [
+    {q:"Unscramble: 'tca'", a:"cat"},
+    {q:"Unscramble: 'god'", a:"dog"},
+    {q:"Opposite of 'hot'?", a:"cold"},
+    {q:"Fill: 2,4,6,?", a:"8"},
+    {q:"Color of sky?", a:"blue"},
+    {q:"Spell: 'aple'", a:"apple"},
+    {q:"Animal says meow?", a:"cat"},
+    {q:"5 + 5 = ?", a:"10"},
+];
 
 // ================= UI =================
 function addChat(html){
@@ -104,7 +113,7 @@ function addChat(html){
 
 function updateUsers(list){
     usersList = list || [];
-    users.innerHTML = usersList.map(u => u).join("<br>");
+    users.innerHTML = usersList.join("<br>");
 }
 
 // ================= LOGIN =================
@@ -116,7 +125,6 @@ function login(){
 
     socket.onopen = () => {
         status.innerText = "Connecting...";
-
         socket.send(JSON.stringify({
             handler:"3rd_login",
             payload:{
@@ -133,33 +141,27 @@ function login(){
 
         switch(msg.handler){
 
-        // ================= LOGIN =================
         case "3rd_login":
             loginBox.style.display="none";
             main.style.display="block";
             status.innerText="Login success";
-            break;
+        break;
 
-        // ================= ROOM JOIN =================
         case "join_room":
-            if(msg.members){
-                updateUsers(msg.members.map(m=>m.username));
-            }
+            updateUsers(msg.members.map(m=>m.username));
             subject.innerText = msg.subject || "";
-            break;
+        break;
 
-        // ================= LIVE USER LIST =================
         case "room_lists":
             updateUsers(msg.online);
-            break;
+        break;
 
-        // ================= PRESENCE FIXED =================
         case "room_presence":
 
             if(msg.username === myUsername) return;
 
-            if(msg.status === "update"){
-                addChat(`<span class="join">🟢 ${msg.username} joined the room</span>`);
+            if(msg.status==="update"){
+                addChat(`🟢 ${msg.username} joined`);
 
                 if(!usersList.includes(msg.username)){
                     usersList.push(msg.username);
@@ -167,46 +169,41 @@ function login(){
                 }
 
                 if(welcomeToggle.checked){
-                    let w = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
-                    sendBot(`👋 ${msg.username} ${w[Math.floor(Math.random()*w.length)]}`);
+                    sendBot(`👋 Welcome ${msg.username}!`);
                 }
             }
 
-            if(msg.status === "left"){
-                addChat(`<span class="leave">🔴 ${msg.username} left the room</span>`);
-                usersList = usersList.filter(u => u !== msg.username);
+            if(msg.status==="left"){
+                addChat(`🔴 ${msg.username} left`);
+                usersList = usersList.filter(u=>u!==msg.username);
                 updateUsers(usersList);
             }
 
         break;
 
-        // ================= CHAT =================
         case "room_msg":
 
             let m = msg.message;
             renderMessage(m);
 
-            if(m.sender === myUsername) break;
+            if(m.sender === myUsername) return;
 
             let text = (m.body || "").toLowerCase().trim();
 
-            // ---------- COMMAND: MYSCORE ----------
+            // ================= COMMANDS =================
             if(text === "myscore"){
-
                 let s = userScores[m.sender] || 0;
                 let sp = userBestSpeed[m.sender];
 
                 sendBot(
                     sp
-                    ? `📊 ${m.sender} | Score: ${s} | Best: ${sp.toFixed(2)}s`
-                    : `📊 ${m.sender} | Score: ${s}`
+                    ? `📊 ${m.sender} | ${s} pts | ⚡ ${sp.toFixed(2)}s`
+                    : `📊 ${m.sender} | ${s} pts`
                 );
                 return;
             }
 
-            // ---------- COMMAND: TOP ----------
             if(text === "top"){
-
                 let arr = Object.keys(userScores);
 
                 if(arr.length === 0){
@@ -229,65 +226,52 @@ function login(){
             // ================= QUIZ CHECK =================
             if(!quizActive || currentAnswer === null) return;
 
-        let userAnswer = m.body.trim().toLowerCase();
-
-let isCorrect = false;
-
-if(quizType === "math"){
-    isCorrect = parseInt(userAnswer) === currentAnswer;
-} else {
-    isCorrect = userAnswer === currentAnswer;
-}
-
-if(!isCorrect) return;
-            if(isNaN(ans)) return;
-
-          //  if(answeredThisRound.has(m.sender)) return;
-
             let now = Date.now();
-            if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown) return;
 
-         if(ans === currentAnswer){
+            if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown)
+                return;
 
-    // 🛑 STOP ROUND
-    clearInterval(repeatTimer);
-    currentAnswer = null; // lock question
+            let correct = false;
 
-    answeredThisRound.add(m.sender);
-    lastAnswerTime[m.sender] = now;
+            if(quizType === "math"){
+                correct = parseInt(text) === currentAnswer;
+            } else {
+                correct = text === currentAnswer;
+            }
 
-    let timeTaken = (now - questionStartTime) / 1000;
+            if(!correct) return;
 
-    let scoreGain =
-        timeTaken <= 2 ? 100 :
-        timeTaken <= 5 ? 70 :
-        timeTaken <= 8 ? 50 : 30;
+            // ✅ STOP CURRENT ROUND
+            clearInterval(repeatTimer);
+            currentAnswer = null;
 
-    // ✅ INIT PLAYER
-    if(!userScores[m.sender]){
-        userScores[m.sender] = 0;
-        userBestSpeed[m.sender] = 999;
-    }
+            lastAnswerTime[m.sender] = now;
 
-    userScores[m.sender] += scoreGain;
+            let timeTaken = (now - questionStartTime)/1000;
 
-    // ✅ SAVE BEST SPEED
-    if(timeTaken < userBestSpeed[m.sender]){
-        userBestSpeed[m.sender] = timeTaken;
-    }
+            let score =
+                timeTaken <= 2 ? 100 :
+                timeTaken <= 5 ? 70 :
+                timeTaken <= 8 ? 50 : 30;
 
-    // ✅ SHOW FULL RESULT
-    sendBot(
-        `🏆 ${m.sender} +${scoreGain} pts (${timeTaken.toFixed(2)}s)\n` +
-        `📊 Total Score: ${userScores[m.sender]} | Best: ${userBestSpeed[m.sender].toFixed(2)}s`
-    );
+            if(!userScores[m.sender]){
+                userScores[m.sender] = 0;
+                userBestSpeed[m.sender] = 999;
+            }
 
-    // ✅ NEXT QUESTION (FOR BOTH MODES)
-    setTimeout(()=>{
-        nextQuestion();
-    }, 4000);
-}
- 
+            userScores[m.sender] += score;
+
+            if(timeTaken < userBestSpeed[m.sender]){
+                userBestSpeed[m.sender] = timeTaken;
+            }
+
+            sendBot(
+                `🏆 ${m.sender} +${score} (${timeTaken.toFixed(2)}s)\n` +
+                `📊 Total: ${userScores[m.sender]} | Best: ${userBestSpeed[m.sender].toFixed(2)}s`
+            );
+
+            setTimeout(nextQuestion, 4000);
+
         break;
         }
     };
@@ -311,7 +295,6 @@ function renderMessage(m){
 
 // ================= ROOM =================
 function joinRoom(){
-
     currentRoom = roomName.value;
 
     socket.send(JSON.stringify({
@@ -322,7 +305,6 @@ function joinRoom(){
 
 // ================= SEND =================
 function sendMsg(){
-
     socket.send(JSON.stringify({
         handler:"room_msg",
         payload:{
@@ -339,9 +321,7 @@ function nextQuestion(){
 
     clearInterval(repeatTimer);
 
-    answeredThisRound.clear();
     repeatCount = 0;
-
     questionStartTime = Date.now();
 
     // 🔁 SWITCH MODE
@@ -359,16 +339,7 @@ function nextQuestion(){
 
     } else {
 
-        // WORD QUIZ
-        let words = [
-            {q:"Unscramble: 'tca'", a:"cat"},
-            {q:"Opposite of 'hot'?", a:"cold"},
-            {q:"Fill: 2,4,6,?", a:"8"},
-            {q:"What is color of sky?", a:"blue"},
-            {q:"Spell correctly: 'aple'", a:"apple"}
-        ];
-
-        let pick = words[Math.floor(Math.random()*words.length)];
+        let pick = wordBank[Math.floor(Math.random()*wordBank.length)];
 
         currentAnswer = pick.a.toLowerCase();
         questionText = `🧠 WORD: ${pick.q}`;
@@ -382,7 +353,7 @@ function nextQuestion(){
 
         repeatCount++;
 
-        sendBot(`⏳ REPEAT: ${questionText}`);
+        sendBot(`⏳ ${questionText}`);
 
         if(repeatCount >= maxRepeats){
 
@@ -395,8 +366,9 @@ function nextQuestion(){
             setTimeout(nextQuestion, 5000);
         }
 
-    }, 15000);
+    },15000);
 }
+
 // ================= TOGGLE =================
 function toggleMath(){
 
@@ -405,9 +377,8 @@ function toggleMath(){
         if(quizActive) return;
 
         quizActive = true;
-        quizMode = "normal";
 
-        sendBot("🧠 Quiz Started!");
+        sendBot("🧠 Fun Quiz Started!");
         nextQuestion();
 
     } else {
@@ -417,12 +388,6 @@ function toggleMath(){
 
         sendBot("🛑 Quiz Stopped");
     }
-}
-
-// ================= BATTLE MODE =================
-function enableBattleMode(){
-    quizMode = "battle";
-    sendBot("🏁 Battle Mode ON!");
 }
 
 </script>
