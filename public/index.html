@@ -234,8 +234,8 @@ function addEmoji(e){
 // ---------------- QUIZ ----------------
 function generateQuestion(){
 
-    let a = Math.floor(Math.random()*10);
-    let b = Math.floor(Math.random()*10);
+    let a = Math.floor(Math.random()*20);
+    let b = Math.floor(Math.random()*20);
 
     currentAnswer = a + b;
     currentQuestion = `${a} + ${b} = ?`;
@@ -259,15 +259,15 @@ function askLoop(){
 
             sendBot(`⏰ Answer: ${currentAnswer}`);
 
-            setTimeout(generateQuestion,3000);
+            setTimeout(generateQuestion,10000);
         }
 
-    },10000);
+    },20000);
 }
 
 function nextQuestion(){
     clearInterval(quizTimer);
-    setTimeout(generateQuestion,3000);
+    setTimeout(generateQuestion,10000);
 }
 
 // ---------------- TOGGLE ----------------
