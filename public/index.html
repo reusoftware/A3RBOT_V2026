@@ -232,7 +232,7 @@ function login(){
             let ans = parseInt(m.body);
             if(isNaN(ans)) return;
 
-            if(answeredThisRound.has(m.sender)) return;
+          //  if(answeredThisRound.has(m.sender)) return;
 
             let now = Date.now();
             if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown) return;
