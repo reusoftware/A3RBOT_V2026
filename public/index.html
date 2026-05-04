@@ -1,1 +1,293 @@
-<!DOCTYPE html> <html> <head> <title>A3R BOT</title> <style> body { font-family: Arial; background:#f5f5f5; } #chatBox, #buzzBox { width:100%; height:220px; overflow:auto; background:white; padding:5px; } .msg { margin:5px; } .join { color:green; font-weight:bold; } .leave { color:darkgreen; font-weight:bold; } .controls { margin:10px 0; } img { border-radius:8px; } </style> </head> <body> <h2>🤖 A3R BOT</h2> <!-- LOGIN --> <div id="loginBox"> <input id="user" placeholder="Username"><br><br> <input id="pass" type="password" placeholder="Password"><br><br> <button onclick="login()">LOGIN</button> <p id="status"></p> </div> <!-- MAIN --> <div id="main" style="display:none"> <div class="controls"> <label><input type="checkbox" id="welcomeToggle" checked> Welcome</label> <label><input type="checkbox" id="mathToggle" onchange="toggleMath()"> Math Quiz</label> </div> <h3>ROOM</h3> <input id="roomName" placeholder="Room name"> <button onclick="joinRoom()">JOIN</button> <h4 id="subject"></h4> <div id="users"></div> <hr> <div id="chatBox"></div> <input id="msg"> <button onclick="sendMsg()">SEND</button> <select onchange="addEmoji(this.value)"> <option value="">😊 Emoji</option> <option>😀</option> <option>😂</option> <option>😍</option> <option>🔥</option> <option>👍</option> <option>🎵</option> <option>❤️</option> </select> <hr> <h3>BUZZ</h3> <div id="buzzBox"></div> </div> <script> let socket; let currentRoom = ""; let myUsername = ""; let mathInterval = null; // ---------------- HELPERS ---------------- function addChat(html){ chatBox.innerHTML += <div class="msg">${html}</div>; chatBox.scrollTop = chatBox.scrollHeight; } function addBuzz(html){ buzzBox.innerHTML += <div class="msg">${html}</div>; buzzBox.scrollTop = buzzBox.scrollHeight; } function fixURL(url){ if(url.startsWith("http://")){ return url.replace("http://","https://"); } return url; } function getYouTubeEmbed(url){ let match = url.match(/(?:youtube\.com.*v=|youtu\.be\/)([^&]+)/); if(match){ return "https://www.youtube.com/embed/" + match[1]; } return null; } // ---------------- LOGIN ---------------- function login(){ myUsername = user.value; socket = new WebSocket("wss://viberschat.space:8443/server"); socket.onopen = () => { socket.send(JSON.stringify({ handler:"3rd_login", payload:{ username:user.value, password:pass.value, api_key:"xYn86hjOpJk$" } })); }; socket.onmessage = (e)=>{ let msg = JSON.parse(e.data); switch(msg.handler){ case "3rd_login": loginBox.style.display="none"; main.style.display="block"; status.innerText="Login success"; break; case "join_room": subject.innerText = "📌 " + msg.subject; let list=""; msg.members.forEach(m=>{ list += m.username + "<br>"; }); users.innerHTML = list; break; // JOIN / LEAVE case "room_presence": if(!welcomeToggle.checked) return; if(msg.status=="update"){ addChat(<span class="join">🟢 ${msg.username} joined the room</span>); } if(msg.status=="left"){ addChat(<span class="leave">🔴 ${msg.username} left the room</span>); } break; // MESSAGE case "room_msg": renderMessage(msg.message); break; // BUZZ case "new_buzz": renderBuzz(msg.data); break; } }; } // ---------------- MESSAGE ---------------- function renderMessage(m){ let html = <b>${m.sender}</b>: ${m.body || ""}; if(m.attachments){ m.attachments.forEach(url=>{ let fixed = fixURL(url); let yt = getYouTubeEmbed(url); if(yt){ html += <br> <iframe width="250" height="150" src="${yt}" frameborder="0" allowfullscreen></iframe>; } else if(fixed.match(/\.(jpg|png|jpeg|gif)/i)){ html += <br><img src="${fixed}" width="150">; } else if(fixed.match(/\.(mp3|aac|wav|ogg)/i)){ html += <br> <audio controls preload="metadata"> <source src="${fixed}"> </audio>; } else if(fixed.match(/\.(mp4|webm)/i)){ html += <br><video width="200" controls src="${fixed}"></video>; } else{ html += <br><a href="${fixed}" target="_blank">file</a>; } }); } addChat(html); } // ---------------- BUZZ ---------------- function renderBuzz(b){ let html = <b>🔥 ${b.username}</b><br>${b.content}<br>❤️ ${b.likes_count}; if(b.attachments){ b.attachments.forEach(url=>{ let fixed = fixURL(url); let yt = getYouTubeEmbed(url); if(yt){ html += <br> <iframe width="250" height="150" src="${yt}" frameborder="0" allowfullscreen></iframe>; } else if(fixed.match(/\.(jpg|png|jpeg|gif)/i)){ html += <br><img src="${fixed}" width="150">; } else if(fixed.match(/\.(mp3|aac|wav|ogg)/i)){ html += <br> <audio controls preload="metadata"> <source src="${fixed}"> </audio>; } else if(fixed.match(/\.(mp4|webm)/i)){ html += <br><video width="200" controls src="${fixed}"></video>; } else{ html += <br><a href="${fixed}" target="_blank">file</a>; } }); } addBuzz(html); } // ---------------- JOIN ---------------- function joinRoom(){ currentRoom = roomName.value; socket.send(JSON.stringify({ handler:"join_room", payload:{ room_name: currentRoom } })); } // ---------------- SEND ---------------- function sendMsg(){ let text = msg.value; socket.send(JSON.stringify({ handler:"room_msg", payload:{ room_name: currentRoom, body: text } })); msg.value=""; } // ---------------- EMOJI ---------------- function addEmoji(e){ msg.value += e; } // ---------------- MATH QUIZ ---------------- function startMathQuiz(){ if(mathInterval) return; mathInterval = setInterval(()=>{ let a = Math.floor(Math.random()*10); let b = Math.floor(Math.random()*10); let question = ${a} + ${b} = ?; socket.send(JSON.stringify({ handler:"room_msg", payload:{ room_name: currentRoom, body: "🧠 QUIZ: " + question } })); }, 15000); } function stopMathQuiz(){ clearInterval(mathInterval); mathInterval = null; } function toggleMath(){ if(mathToggle.checked){ startMathQuiz(); } else { stopMathQuiz(); } } </script> </body> </html>
+<!DOCTYPE html>
+<html>
+<head>
+<title>A3R BOT</title>
+
+<style>
+body { font-family: Arial; background:#f5f5f5; }
+
+#chatBox {
+    width:100%;
+    height:250px;
+    overflow:auto;
+    background:white;
+    padding:5px;
+}
+
+.msg { margin:5px; }
+
+.join { color:green; font-weight:bold; }
+.leave { color:darkgreen; font-weight:bold; }
+
+.controls { margin:10px 0; }
+</style>
+</head>
+
+<body>
+
+<h2>🤖 A3R BOT</h2>
+
+<!-- LOGIN -->
+<div id="loginBox">
+<input id="user" placeholder="Username"><br><br>
+<input id="pass" type="password" placeholder="Password"><br><br>
+<button onclick="login()">LOGIN</button>
+<p id="status"></p>
+</div>
+
+<!-- MAIN -->
+<div id="main" style="display:none">
+
+<div class="controls">
+<label><input type="checkbox" id="welcomeToggle" checked> Welcome</label>
+<label><input type="checkbox" id="mathToggle" onchange="toggleMath()"> Math Quiz</label>
+</div>
+
+<h3>ROOM</h3>
+<input id="roomName" placeholder="Room name">
+<button onclick="joinRoom()">JOIN</button>
+
+<h4 id="subject"></h4>
+<div id="users"></div>
+
+<hr>
+
+<div id="chatBox"></div>
+
+<input id="msg">
+<button onclick="sendMsg()">SEND</button>
+
+<select onchange="addEmoji(this.value)">
+<option value="">😊 Emoji</option>
+<option>😀</option>
+<option>😂</option>
+<option>😍</option>
+<option>🔥</option>
+<option>👍</option>
+<option>🎵</option>
+<option>❤️</option>
+</select>
+
+</div>
+
+<script>
+
+let socket;
+let currentRoom = "";
+let myUsername = "";
+
+// QUIZ
+let quizActive = false;
+let currentAnswer = null;
+let currentQuestion = "";
+let repeatCount = 0;
+let quizTimer = null;
+let scores = {};
+
+// ---------------- UI ----------------
+function addChat(html){
+    chatBox.innerHTML += `<div class="msg">${html}</div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function updateUsers(list){
+    users.innerHTML = list.map(u => u).join("<br>");
+}
+
+// ---------------- LOGIN ----------------
+function login(){
+
+    myUsername = user.value;
+
+    socket = new WebSocket("wss://viberschat.space:8443/server");
+
+    socket.onopen = () => {
+        status.innerText = "Connecting...";
+        socket.send(JSON.stringify({
+            handler:"3rd_login",
+            payload:{
+                username:user.value,
+                password:pass.value,
+                api_key:"xYn86hjOpJk$"
+            }
+        }));
+    };
+
+    socket.onmessage = (e)=>{
+
+        let msg = JSON.parse(e.data);
+
+        switch(msg.handler){
+
+        case "3rd_login":
+            loginBox.style.display="none";
+            main.style.display="block";
+            status.innerText="Login success";
+            break;
+
+        case "join_room":
+            updateUsers(msg.members.map(m=>m.username));
+            break;
+
+        case "room_lists":
+            updateUsers(msg.online);
+            break;
+
+        case "room_presence":
+
+            if(msg.status==="update"){
+                addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
+
+                updateUsers([...users.innerText.split("\n"), msg.username]);
+
+                if(welcomeToggle.checked){
+                    let arr = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
+                    sendBot(`👋 ${msg.username}, ${arr[Math.floor(Math.random()*arr.length)]}`);
+                }
+            }
+
+            if(msg.status==="left"){
+                addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
+
+                let list = users.innerText.split("\n").filter(u => u !== msg.username);
+                updateUsers(list);
+            }
+
+            break;
+
+        case "room_msg":
+
+            let m = msg.message;
+
+            renderMessage(m);
+
+            // QUIZ CHECK
+            if(quizActive && m.body){
+
+                let ans = parseInt(m.body.trim());
+
+                if(ans === currentAnswer){
+
+                    if(!scores[m.sender]){
+                        scores[m.sender] = 0;
+                        sendBot(`🎉 ${m.sender} joined quiz! Score: 0`);
+                    }
+
+                    scores[m.sender]++;
+                    sendBot(`✅ ${m.sender} correct! Score: ${scores[m.sender]}`);
+
+                    nextQuestion();
+                }
+            }
+
+            break;
+        }
+    };
+}
+
+// ---------------- BOT SEND ----------------
+function sendBot(text){
+    socket.send(JSON.stringify({
+        handler:"room_msg",
+        payload:{
+            room_name: currentRoom,
+            body: text
+        }
+    }));
+}
+
+// ---------------- MESSAGE ----------------
+function renderMessage(m){
+    addChat(`<b>${m.sender}</b>: ${m.body}`);
+}
+
+// ---------------- JOIN ----------------
+function joinRoom(){
+
+    currentRoom = roomName.value;
+
+    socket.send(JSON.stringify({
+        handler:"join_room",
+        payload:{ room_name: currentRoom }
+    }));
+}
+
+// ---------------- SEND ----------------
+function sendMsg(){
+
+    socket.send(JSON.stringify({
+        handler:"room_msg",
+        payload:{
+            room_name: currentRoom,
+            body: msg.value
+        }
+    }));
+
+    msg.value="";
+}
+
+// ---------------- EMOJI ----------------
+function addEmoji(e){
+    msg.value += e;
+}
+
+// ---------------- QUIZ ----------------
+function generateQuestion(){
+
+    let a = Math.floor(Math.random()*10);
+    let b = Math.floor(Math.random()*10);
+
+    currentAnswer = a + b;
+    currentQuestion = `${a} + ${b} = ?`;
+
+    repeatCount = 0;
+
+    askLoop();
+}
+
+function askLoop(){
+
+    quizTimer = setInterval(()=>{
+
+        repeatCount++;
+
+        sendBot(`🧠 QUIZ: ${currentQuestion}`);
+
+        if(repeatCount >= 5){
+
+            clearInterval(quizTimer);
+
+            sendBot(`⏰ Answer: ${currentAnswer}`);
+
+            setTimeout(generateQuestion,3000);
+        }
+
+    },10000);
+}
+
+function nextQuestion(){
+    clearInterval(quizTimer);
+    setTimeout(generateQuestion,3000);
+}
+
+// ---------------- TOGGLE ----------------
+function toggleMath(){
+
+    if(mathToggle.checked){
+
+        quizActive = true;
+        sendBot("🧠 Quiz Started!");
+        generateQuestion();
+
+    } else {
+
+        quizActive = false;
+        clearInterval(quizTimer);
+        sendBot("🛑 Quiz Stopped");
+    }
+}
+
+</script>
+
+</body>
+</html>
