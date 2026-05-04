@@ -133,27 +133,34 @@ function login(){
             updateUsers(msg.online);
             break;
 
-        case "room_presence":
+       case "room_presence":
 
-            if(msg.status==="update"){
-                addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
+    // ❌ IGNORE YOURSELF
+    if(msg.username === myUsername) return;
 
-                updateUsers([...users.innerText.split("\n"), msg.username]);
+    if(msg.status==="update"){
+        addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
 
-                if(welcomeToggle.checked){
-                    let arr = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
-                    sendBot(`👋 ${msg.username}, ${arr[Math.floor(Math.random()*arr.length)]}`);
-                }
-            }
+        let list = users.innerText.split("\n").filter(u => u);
+        if(!list.includes(msg.username)){
+            list.push(msg.username);
+        }
+        updateUsers(list);
 
-            if(msg.status==="left"){
-                addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
+        if(welcomeToggle.checked){
+            let arr = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
+            sendBot(`👋 ${msg.username}, ${arr[Math.floor(Math.random()*arr.length)]}`);
+        }
+    }
 
-                let list = users.innerText.split("\n").filter(u => u !== msg.username);
-                updateUsers(list);
-            }
+    if(msg.status==="left"){
+        addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
 
-            break;
+        let list = users.innerText.split("\n").filter(u => u !== msg.username);
+        updateUsers(list);
+    }
+
+    break;
 
         case "room_msg":
 
@@ -162,23 +169,26 @@ function login(){
             renderMessage(m);
 
             // QUIZ CHECK
-            if(quizActive && m.body){
+           if(quizActive && m.body){
 
-                let ans = parseInt(m.body.trim());
+    // ❌ IGNORE YOURSELF
+    if(m.sender === myUsername) return;
 
-                if(ans === currentAnswer){
+    let ans = parseInt(m.body.trim());
 
-                    if(!scores[m.sender]){
-                        scores[m.sender] = 0;
-                        sendBot(`🎉 ${m.sender} joined quiz! Score: 0`);
-                    }
+    if(ans === currentAnswer){
 
-                    scores[m.sender]++;
-                    sendBot(`✅ ${m.sender} correct! Score: ${scores[m.sender]}`);
+        if(!scores[m.sender]){
+            scores[m.sender] = 0;
+            sendBot(`🎉 ${m.sender} joined quiz! Score: 0`);
+        }
 
-                    nextQuestion();
-                }
-            }
+        scores[m.sender]++;
+        sendBot(`✅ ${m.sender} correct! Score: ${scores[m.sender]}`);
+
+        nextQuestion();
+    }
+}
 
             break;
         }
