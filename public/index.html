@@ -20,6 +20,12 @@ body { font-family: Arial; background:#f5f5f5; }
 .leave { color:darkgreen; font-weight:bold; }
 
 .controls { margin:10px 0; }
+
+#users {
+    background:#fff;
+    padding:5px;
+    margin-bottom:10px;
+}
 </style>
 </head>
 
@@ -40,7 +46,8 @@ body { font-family: Arial; background:#f5f5f5; }
 
 <div class="controls">
 <label><input type="checkbox" id="welcomeToggle" checked> Welcome</label>
-<label><input type="checkbox" id="mathToggle" onchange="toggleMath()"> Math Quiz</label>
+<label><input type="checkbox" id="mathToggle" onchange="toggleMath()"> Quiz</label>
+<button onclick="enableBattleMode()">Battle Mode</button>
 </div>
 
 <h3>ROOM</h3>
@@ -48,6 +55,7 @@ body { font-family: Arial; background:#f5f5f5; }
 <button onclick="joinRoom()">JOIN</button>
 
 <h4 id="subject"></h4>
+
 <div id="users"></div>
 
 <hr>
@@ -57,17 +65,6 @@ body { font-family: Arial; background:#f5f5f5; }
 <input id="msg">
 <button onclick="sendMsg()">SEND</button>
 
-<select onchange="addEmoji(this.value)">
-<option value="">😊 Emoji</option>
-<option>😀</option>
-<option>😂</option>
-<option>😍</option>
-<option>🔥</option>
-<option>👍</option>
-<option>🎵</option>
-<option>❤️</option>
-</select>
-
 </div>
 
 <script>
@@ -76,36 +73,28 @@ let socket;
 let currentRoom = "";
 let myUsername = "";
 
-// ================= QUIZ STATE =================
+// ================= USERS =================
+let usersList = [];
+
+// ================= QUIZ =================
 let quizActive = false;
+let quizMode = "normal";
+
 let currentAnswer = null;
 let questionStartTime = 0;
 
 let repeatTimer = null;
 let repeatCount = 0;
+
 let maxRepeats = 5;
 
-// 🧠 MODE CONTROL (NORMAL / BATTLE)
-let quizMode = "normal";
+let answeredThisRound = new Set();
+let lastAnswerTime = {};
+let cooldown = 1500;
 
-// ================= PLAYER DATA =================
+// ================= SCORES =================
 let userScores = {};
 let userBestSpeed = {};
-let lastAnswerTime = {};
-
-let cooldown = 2000;
-let answeredThisRound = new Set();
-
-// ================= LOCAL STORAGE =================
-function loadData(){
-    userScores = JSON.parse(localStorage.getItem("scores") || "{}");
-    userBestSpeed = JSON.parse(localStorage.getItem("speed") || "{}");
-}
-
-function saveData(){
-    localStorage.setItem("scores", JSON.stringify(userScores));
-    localStorage.setItem("speed", JSON.stringify(userBestSpeed));
-}
 
 // ================= UI =================
 function addChat(html){
@@ -114,7 +103,8 @@ function addChat(html){
 }
 
 function updateUsers(list){
-    users.innerHTML = list.map(u => u).join("<br>");
+    usersList = list || [];
+    users.innerHTML = usersList.map(u => u).join("<br>");
 }
 
 // ================= LOGIN =================
@@ -126,6 +116,7 @@ function login(){
 
     socket.onopen = () => {
         status.innerText = "Connecting...";
+
         socket.send(JSON.stringify({
             handler:"3rd_login",
             payload:{
@@ -142,37 +133,54 @@ function login(){
 
         switch(msg.handler){
 
+        // ================= LOGIN =================
         case "3rd_login":
             loginBox.style.display="none";
             main.style.display="block";
             status.innerText="Login success";
-            loadData();
             break;
 
+        // ================= ROOM JOIN =================
         case "join_room":
-            updateUsers(msg.members.map(m=>m.username));
+            if(msg.members){
+                updateUsers(msg.members.map(m=>m.username));
+            }
+            subject.innerText = msg.subject || "";
             break;
 
+        // ================= LIVE USER LIST =================
         case "room_lists":
             updateUsers(msg.online);
             break;
 
-        // ================= JOIN / LEAVE =================
+        // ================= PRESENCE FIXED =================
         case "room_presence":
 
             if(msg.username === myUsername) return;
 
-            if(msg.status==="update"){
-                addChat(`<span class="join">🟢 ${msg.username} joined</span>`);
+            if(msg.status === "update"){
+                addChat(`<span class="join">🟢 ${msg.username} joined the room</span>`);
+
+                if(!usersList.includes(msg.username)){
+                    usersList.push(msg.username);
+                    updateUsers(usersList);
+                }
+
+                if(welcomeToggle.checked){
+                    let w = ["Welcome!", "Hello!", "Enjoy!", "Nice to see you!"];
+                    sendBot(`👋 ${msg.username} ${w[Math.floor(Math.random()*w.length)]}`);
+                }
             }
 
-            if(msg.status==="left"){
-                addChat(`<span class="leave">🔴 ${msg.username} left</span>`);
+            if(msg.status === "left"){
+                addChat(`<span class="leave">🔴 ${msg.username} left the room</span>`);
+                usersList = usersList.filter(u => u !== msg.username);
+                updateUsers(usersList);
             }
 
         break;
 
-        // ================= CHAT MESSAGE =================
+        // ================= CHAT =================
         case "room_msg":
 
             let m = msg.message;
@@ -182,42 +190,43 @@ function login(){
 
             let text = (m.body || "").toLowerCase().trim();
 
-            // ========== COMMAND: MYSCORE ==========
+            // ---------- COMMAND: MYSCORE ----------
             if(text === "myscore"){
-                let score = userScores[m.sender] || 0;
-                let speed = userBestSpeed[m.sender];
+
+                let s = userScores[m.sender] || 0;
+                let sp = userBestSpeed[m.sender];
 
                 sendBot(
-                    speed
-                    ? `📊 ${m.sender} | Score: ${score} | Best: ${speed.toFixed(2)}s`
-                    : `📊 ${m.sender} | Score: ${score} | No speed yet`
+                    sp
+                    ? `📊 ${m.sender} | Score: ${s} | Best: ${sp.toFixed(2)}s`
+                    : `📊 ${m.sender} | Score: ${s}`
                 );
                 return;
             }
 
-            // ========== COMMAND: TOP ==========
+            // ---------- COMMAND: TOP ----------
             if(text === "top"){
 
-                let players = Object.keys(userScores);
+                let arr = Object.keys(userScores);
 
-                if(players.length === 0){
+                if(arr.length === 0){
                     sendBot("🏆 No players yet!");
                     return;
                 }
 
-                players.sort((a,b)=> userScores[b] - userScores[a]);
+                arr.sort((a,b)=> userScores[b] - userScores[a]);
 
-                let msgTop = "🏆 TOP PLAYERS:\n";
+                let out = "🏆 TOP PLAYERS:\n";
 
-                players.slice(0,10).forEach((p,i)=>{
-                    msgTop += `${i+1}. ${p} | ${userScores[p]} pts\n`;
+                arr.slice(0,10).forEach((p,i)=>{
+                    out += `${i+1}. ${p} | ${userScores[p]} pts\n`;
                 });
 
-                sendBot(msgTop);
+                sendBot(out);
                 return;
             }
 
-            // ========== QUIZ ANSWER ==========
+            // ================= QUIZ CHECK =================
             if(!quizActive || currentAnswer === null) return;
 
             let ans = parseInt(m.body);
@@ -226,9 +235,7 @@ function login(){
             if(answeredThisRound.has(m.sender)) return;
 
             let now = Date.now();
-
-            if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown)
-                return;
+            if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown) return;
 
             if(ans === currentAnswer){
 
@@ -248,16 +255,11 @@ function login(){
                     userBestSpeed[m.sender] = timeTaken;
                 }
 
-                saveData();
+                sendBot(`🏆 ${m.sender} +${scoreGain} (${timeTaken.toFixed(2)}s)`);
 
-                sendBot(
-                    `🏆 ${m.sender} +${scoreGain} pts (${timeTaken.toFixed(2)}s)`
-                );
-
-                // 🧠 BATTLE MODE = instant next question
                 if(quizMode === "battle"){
                     clearInterval(repeatTimer);
-                    setTimeout(nextQuestion, 3000);
+                    setTimeout(nextQuestion, 2500);
                 }
             }
 
@@ -280,6 +282,31 @@ function sendBot(text){
 // ================= MESSAGE =================
 function renderMessage(m){
     addChat(`<b>${m.sender}</b>: ${m.body || ""}`);
+}
+
+// ================= ROOM =================
+function joinRoom(){
+
+    currentRoom = roomName.value;
+
+    socket.send(JSON.stringify({
+        handler:"join_room",
+        payload:{ room_name: currentRoom }
+    }));
+}
+
+// ================= SEND =================
+function sendMsg(){
+
+    socket.send(JSON.stringify({
+        handler:"room_msg",
+        payload:{
+            room_name: currentRoom,
+            body: msg.value
+        }
+    }));
+
+    msg.value="";
 }
 
 // ================= QUIZ ENGINE =================
@@ -308,7 +335,7 @@ function nextQuestion(){
 
             sendBot(`❌ Time up! Answer: ${currentAnswer}`);
 
-            setTimeout(nextQuestion, 5000);
+            setTimeout(nextQuestion, 4000);
         }
 
     }, 10000);
@@ -324,7 +351,7 @@ function toggleMath(){
         quizActive = true;
         quizMode = "normal";
 
-        sendBot("🧠 Normal Quiz Started!");
+        sendBot("🧠 Quiz Started!");
         nextQuestion();
 
     } else {
@@ -338,10 +365,8 @@ function toggleMath(){
 
 // ================= BATTLE MODE =================
 function enableBattleMode(){
-
     quizMode = "battle";
-
-    sendBot("🏁 Battle Mode Activated!");
+    sendBot("🏁 Battle Mode ON!");
 }
 
 </script>
