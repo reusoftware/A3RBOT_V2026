@@ -167,9 +167,7 @@ function login(){
         // MESSAGE
         case "room_msg":
 
-            // prevent duplicate
-            if(msg.message.sender === myUsername) return;
-
+        
             renderMessage(msg.message);
             break;
 
@@ -291,7 +289,7 @@ function sendMsg(){
         }
     }));
 
-    addChat(`<b>ME</b>: ${text}`);
+
     msg.value="";
 }
 
