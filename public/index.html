@@ -84,7 +84,8 @@ let repeatTimer = null;
 let repeatCount = 0;
 let maxRepeats = 5;
 
-let userScores = {};
+let userScores = {};      // total score
+let userBestSpeed = {};   // fastest time (seconds)
 
 // ---------------- UI ----------------
 function addChat(html){
@@ -173,7 +174,51 @@ function login(){
 
             // ❌ ignore your own answer
             if(m.sender === myUsername) break;
+let text = (m.body || "").toLowerCase().trim();
 
+// ---------------- COMMAND: MYSCORE ----------------
+if(text === "myscore"){
+
+    let score = userScores[m.sender] || 0;
+    let speed = userBestSpeed[m.sender];
+
+    if(!speed){
+        sendBot(`📊 ${m.sender}, you have no score yet. Play the quiz!`);
+    } else {
+        sendBot(`📊 ${m.sender} | Score: ${score} | Best Speed: ${speed.toFixed(2)}s`);
+    }
+
+    return;
+}
+
+// ---------------- COMMAND: TOP ----------------
+if(text === "top"){
+
+    let players = Object.keys(userScores);
+
+    if(players.length === 0){
+        sendBot("🏆 No players yet!");
+        return;
+    }
+
+    // sort by score DESC
+    players.sort((a,b)=> userScores[b] - userScores[a]);
+
+    let topList = players.slice(0,10);
+
+    let msgTop = "🏆 TOP PLAYERS:\n";
+
+    topList.forEach((p,i)=>{
+        let score = userScores[p];
+        let speed = userBestSpeed[p] ? userBestSpeed[p].toFixed(2)+"s" : "-";
+
+        msgTop += `${i+1}. ${p} | ${score} pts | ⚡ ${speed}\n`;
+    });
+
+    sendBot(msgTop);
+
+    return;
+}
             // ---------------- QUIZ CHECK ----------------
             if(quizActive && currentAnswer !== null){
 
@@ -197,7 +242,10 @@ function login(){
                     }
 
                     userScores[m.sender] += score;
-
+// save BEST SPEED (lower = better)
+if(!userBestSpeed[m.sender] || timeTaken < userBestSpeed[m.sender]){
+    userBestSpeed[m.sender] = timeTaken;
+}
                     clearInterval(repeatTimer);
                     currentAnswer = null;
 
