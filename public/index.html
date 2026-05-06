@@ -292,50 +292,60 @@ function sendBot(text){
 // ================= MESSAGE =================
 function renderMessage(m){
 
-    let html = `<b>${m.sender}</b>: `;
+    let html = `<b>${m.sender}</b>: ${m.body || ""}`;
 
-    // TEXT
-    if(m.body){
-        html += m.body;
-    }
-
-    // ATTACHMENTS (ARRAY)
+    // ✅ HANDLE ATTACHMENTS
     if(m.attachments && m.attachments.length > 0){
 
         m.attachments.forEach(url => {
 
-            // 🔍 detect file type
-            let lower = url.toLowerCase();
+            let cleanUrl = url.split("?")[0]; // remove query for type check
 
-            // IMAGE
-            if(lower.match(/\.(jpg|jpeg|png|gif|webp)$/)){
-                html += `<br><img src="${url}" style="max-width:200px;border-radius:6px;">`;
+            // ===== IMAGE =====
+            if(/\.(jpg|jpeg|png|gif|webp)$/i.test(cleanUrl)){
+
+                html += `
+                <div>
+                    <img src="${url}" 
+                         style="max-width:200px;border-radius:8px;margin-top:5px"
+                         onerror="this.style.display='none'">
+                </div>`;
+
             }
 
-            // AUDIO
-            else if(lower.match(/\.(mp3|wav|ogg|m4a)$/) || lower.includes("audio")){
+            // ===== AUDIO =====
+            else if(
+                cleanUrl.includes("audio") ||
+                cleanUrl.includes("googlevideo") ||
+                /\.(mp3|wav|ogg|m4a|mp4)$/i.test(cleanUrl)
+            ){
+
                 html += `
-                    <br>
-                    <audio controls>
+                <div>
+                    <audio controls style="margin-top:5px">
                         <source src="${url}">
                         Your browser does not support audio
                     </audio>
-                `;
+                </div>`;
             }
 
-            // VIDEO
-            else if(lower.match(/\.(mp4|webm|mov)$/)){
+            // ===== VIDEO =====
+            else if(/\.(mp4|webm)$/i.test(cleanUrl)){
+
                 html += `
-                    <br>
-                    <video controls style="max-width:250px">
+                <div>
+                    <video controls width="250" style="margin-top:5px">
                         <source src="${url}">
                     </video>
-                `;
+                </div>`;
             }
 
-            // UNKNOWN FILE → DOWNLOAD LINK
-            else {
-                html += `<br><a href="${url}" target="_blank">📎 Open Attachment</a>`;
+            // ===== UNKNOWN FILE =====
+            else{
+                html += `
+                <div>
+                    📎 <a href="${url}" target="_blank">Open file</a>
+                </div>`;
             }
 
         });
@@ -343,7 +353,6 @@ function renderMessage(m){
 
     addChat(html);
 }
-
 // ================= ROOM =================
 function joinRoom(){
     currentRoom = roomName.value;
