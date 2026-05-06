@@ -291,7 +291,57 @@ function sendBot(text){
 
 // ================= MESSAGE =================
 function renderMessage(m){
-    addChat(`<b>${m.sender}</b>: ${m.body || ""}`);
+
+    let html = `<b>${m.sender}</b>: `;
+
+    // TEXT
+    if(m.body){
+        html += m.body;
+    }
+
+    // ATTACHMENTS (ARRAY)
+    if(m.attachments && m.attachments.length > 0){
+
+        m.attachments.forEach(url => {
+
+            // 🔍 detect file type
+            let lower = url.toLowerCase();
+
+            // IMAGE
+            if(lower.match(/\.(jpg|jpeg|png|gif|webp)$/)){
+                html += `<br><img src="${url}" style="max-width:200px;border-radius:6px;">`;
+            }
+
+            // AUDIO
+            else if(lower.match(/\.(mp3|wav|ogg|m4a)$/) || lower.includes("audio")){
+                html += `
+                    <br>
+                    <audio controls>
+                        <source src="${url}">
+                        Your browser does not support audio
+                    </audio>
+                `;
+            }
+
+            // VIDEO
+            else if(lower.match(/\.(mp4|webm|mov)$/)){
+                html += `
+                    <br>
+                    <video controls style="max-width:250px">
+                        <source src="${url}">
+                    </video>
+                `;
+            }
+
+            // UNKNOWN FILE → DOWNLOAD LINK
+            else {
+                html += `<br><a href="${url}" target="_blank">📎 Open Attachment</a>`;
+            }
+
+        });
+    }
+
+    addChat(html);
 }
 
 // ================= ROOM =================
