@@ -298,36 +298,51 @@ function renderMessage(m){
 
         m.attachments.forEach(url => {
 
-            let cleanUrl = url.split("?")[0];
+            // 🔥 FIX: convert to HTTPS upload server
+            let safeUrl = url
+                .replace("http://www.viberschat.space:5666", "https://viberschat.space:2053")
+                .replace("http://viberschat.space:5666", "https://viberschat.space:2053");
 
-            // IMAGE
+            let cleanUrl = safeUrl.split("?")[0];
+
+            // ===== IMAGE =====
             if(/\.(jpg|jpeg|png|gif|webp)$/i.test(cleanUrl)){
+
                 html += `
                 <div>
-                    🖼️ <a href="${url}" target="_blank">View Image</a>
+                    <img src="${safeUrl}" 
+                         style="max-width:200px;border-radius:8px;margin-top:5px;cursor:pointer"
+                         onclick="openImage('${safeUrl}')">
                 </div>`;
             }
 
-            // AUDIO
-            else if(cleanUrl.includes("googlevideo") || /\.(mp3|aac|wav|ogg|m4a|mp4)$/i.test(cleanUrl)){
+            // ===== AUDIO =====
+            else if(/\.(mp3|aac|wav|ogg|m4a)$/i.test(cleanUrl)){
+
                 html += `
                 <div>
-                    🎵 <a href="${url}" target="_blank">Play Audio</a>
+                    <audio controls style="margin-top:5px">
+                        <source src="${safeUrl}">
+                    </audio>
                 </div>`;
             }
 
-            // VIDEO
+            // ===== VIDEO =====
             else if(/\.(mp4|webm)$/i.test(cleanUrl)){
+
                 html += `
                 <div>
-                    🎬 <a href="${url}" target="_blank">Play Video</a>
+                    <video controls width="250" style="margin-top:5px">
+                        <source src="${safeUrl}">
+                    </video>
                 </div>`;
             }
 
+            // ===== UNKNOWN =====
             else{
                 html += `
                 <div>
-                    📎 <a href="${url}" target="_blank">Open file</a>
+                    📎 <a href="${safeUrl}" target="_blank">Open file</a>
                 </div>`;
             }
 
@@ -502,7 +517,31 @@ chatBox.addEventListener("scroll", () => {
     autoScroll =
         chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 10;
 });
+function openImage(url){
 
+    let modal = document.createElement("div");
+
+    modal.style.position = "fixed";
+    modal.style.top = 0;
+    modal.style.left = 0;
+    modal.style.width = "100%";
+    modal.style.height = "100%";
+    modal.style.background = "rgba(0,0,0,0.8)";
+    modal.style.display = "flex";
+    modal.style.alignItems = "center";
+    modal.style.justifyContent = "center";
+    modal.style.zIndex = 9999;
+
+    modal.innerHTML = `
+        <img src="${url}" style="max-width:90%;max-height:90%;border-radius:10px">
+    `;
+
+    modal.onclick = () => modal.remove();
+
+    document.body.appendChild(modal);
+}
+
+    
 </script>
 
 </body>
