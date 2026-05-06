@@ -76,7 +76,7 @@ let quizType = "math";
 
 // ================= USERS =================
 let usersList = [];
-
+let autoScroll = true;
 // ================= QUIZ =================
 let quizActive = false;
 let currentAnswer = null;
@@ -92,23 +92,21 @@ let cooldown = 1500;
 // ================= SCORES =================
 let userScores = {};
 let userBestSpeed = {};
+let quizModes = ["math", "word", "guess", "trivia"];
+let quizIndex = 0;
 
-// ================= WORD BANK =================
-const wordBank = [
-    {q:"Unscramble: 'tca'", a:"cat"},
-    {q:"Unscramble: 'god'", a:"dog"},
-    {q:"Opposite of 'hot'?", a:"cold"},
-    {q:"Fill: 2,4,6,?", a:"8"},
-    {q:"Color of sky?", a:"blue"},
-    {q:"Spell: 'aple'", a:"apple"},
-    {q:"Animal says meow?", a:"cat"},
-    {q:"5 + 5 = ?", a:"10"},
-];
 
 // ================= UI =================
 function addChat(html){
+
+    const isAtBottom =
+        chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 5;
+
     chatBox.innerHTML += `<div class="msg">${html}</div>`;
-    chatBox.scrollTop = chatBox.scrollHeight;
+
+    if(isAtBottom){
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
 }
 
 function updateUsers(list){
@@ -231,13 +229,13 @@ function login(){
             if(lastAnswerTime[m.sender] && now - lastAnswerTime[m.sender] < cooldown)
                 return;
 
-            let correct = false;
+          let correct = false;
 
-            if(quizType === "math"){
-                correct = parseInt(text) === currentAnswer;
-            } else {
-                correct = text === currentAnswer;
-            }
+if(quizType === "math" || quizType === "guess"){
+    correct = parseInt(text) === currentAnswer;
+} else {
+    correct = text === currentAnswer;
+}
 
             if(!correct) return;
 
@@ -324,11 +322,13 @@ function nextQuestion(){
     repeatCount = 0;
     questionStartTime = Date.now();
 
-    // 🔁 SWITCH MODE
-    quizType = (quizType === "math") ? "word" : "math";
+    // 🔁 rotate modes
+    quizIndex = (quizIndex + 1) % quizModes.length;
+    quizType = quizModes[quizIndex];
 
     let questionText = "";
 
+    // ================= MATH =================
     if(quizType === "math"){
 
         let a = Math.floor(Math.random()*20);
@@ -336,13 +336,38 @@ function nextQuestion(){
 
         currentAnswer = a + b;
         questionText = `🧮 ${a} + ${b} = ?`;
+    }
 
-    } else {
+    // ================= WORD =================
+    else if(quizType === "word"){
 
         let pick = wordBank[Math.floor(Math.random()*wordBank.length)];
 
         currentAnswer = pick.a.toLowerCase();
         questionText = `🧠 WORD: ${pick.q}`;
+    }
+
+    // ================= GUESS NUMBER =================
+    else if(quizType === "guess"){
+
+        currentAnswer = Math.floor(Math.random()*50) + 1;
+        questionText = `🎯 GUESS NUMBER (1-50)`;
+    }
+
+    // ================= TRIVIA =================
+    else if(quizType === "trivia"){
+
+        let trivia = [
+            {q:"Capital of France?", a:"paris"},
+            {q:"2 + 2 * 2 = ?", a:"6"},
+            {q:"Fastest land animal?", a:"cheetah"},
+            {q:"Color of banana?", a:"yellow"},
+        ];
+
+        let pick = trivia[Math.floor(Math.random()*trivia.length)];
+
+        currentAnswer = pick.a.toLowerCase();
+        questionText = `🌍 TRIVIA: ${pick.q}`;
     }
 
     sendBot(questionText);
@@ -363,7 +388,7 @@ function nextQuestion(){
 
             currentAnswer = null;
 
-            setTimeout(nextQuestion, 5000);
+            setTimeout(nextQuestion, 4000);
         }
 
     },15000);
@@ -389,7 +414,13 @@ function toggleMath(){
         sendBot("🛑 Quiz Stopped");
     }
 }
+chatBox.addEventListener("scroll", () => {
 
+    let nearBottom =
+        chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 10;
+
+    autoScroll = nearBottom;
+});
 </script>
 
 </body>
