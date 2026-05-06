@@ -298,52 +298,36 @@ function renderMessage(m){
 
         m.attachments.forEach(url => {
 
-            // 🔥 FIX: force https if possible
-            let safeUrl = url.replace(/^http:\/\//i, "https://");
+            let cleanUrl = url.split("?")[0];
 
-            let cleanUrl = safeUrl.split("?")[0];
-
-            // ===== IMAGE =====
+            // IMAGE
             if(/\.(jpg|jpeg|png|gif|webp)$/i.test(cleanUrl)){
-
                 html += `
                 <div>
-                    <img src="${safeUrl}" 
-                         style="max-width:200px;border-radius:8px;margin-top:5px"
-                         onerror="this.outerHTML='⚠️ Image blocked (HTTP)'">
+                    🖼️ <a href="${url}" target="_blank">View Image</a>
                 </div>`;
             }
 
-            // ===== AUDIO =====
-            else if(
-                cleanUrl.includes("googlevideo") ||
-                /\.(mp3|aac|wav|ogg|m4a|mp4)$/i.test(cleanUrl)
-            ){
-
+            // AUDIO
+            else if(cleanUrl.includes("googlevideo") || /\.(mp3|aac|wav|ogg|m4a|mp4)$/i.test(cleanUrl)){
                 html += `
                 <div>
-                    <audio controls style="margin-top:5px">
-                        <source src="${safeUrl}">
-                    </audio>
+                    🎵 <a href="${url}" target="_blank">Play Audio</a>
                 </div>`;
             }
 
-            // ===== VIDEO =====
+            // VIDEO
             else if(/\.(mp4|webm)$/i.test(cleanUrl)){
-
                 html += `
                 <div>
-                    <video controls width="250" style="margin-top:5px">
-                        <source src="${safeUrl}">
-                    </video>
+                    🎬 <a href="${url}" target="_blank">Play Video</a>
                 </div>`;
             }
 
-            // ===== FALLBACK =====
             else{
                 html += `
                 <div>
-                    📎 <a href="${safeUrl}" target="_blank">Open file</a>
+                    📎 <a href="${url}" target="_blank">Open file</a>
                 </div>`;
             }
 
