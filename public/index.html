@@ -294,37 +294,36 @@ function renderMessage(m){
 
     let html = `<b>${m.sender}</b>: ${m.body || ""}`;
 
-    // ✅ HANDLE ATTACHMENTS
     if(m.attachments && m.attachments.length > 0){
 
         m.attachments.forEach(url => {
 
-            let cleanUrl = url.split("?")[0]; // remove query for type check
+            // 🔥 FIX: force https if possible
+            let safeUrl = url.replace(/^http:\/\//i, "https://");
+
+            let cleanUrl = safeUrl.split("?")[0];
 
             // ===== IMAGE =====
             if(/\.(jpg|jpeg|png|gif|webp)$/i.test(cleanUrl)){
 
                 html += `
                 <div>
-                    <img src="${url}" 
+                    <img src="${safeUrl}" 
                          style="max-width:200px;border-radius:8px;margin-top:5px"
-                         onerror="this.style.display='none'">
+                         onerror="this.outerHTML='⚠️ Image blocked (HTTP)'">
                 </div>`;
-
             }
 
             // ===== AUDIO =====
             else if(
-                cleanUrl.includes("audio") ||
                 cleanUrl.includes("googlevideo") ||
-                /\.(mp3|wav|ogg|m4a|mp4)$/i.test(cleanUrl)
+                /\.(mp3|aac|wav|ogg|m4a|mp4)$/i.test(cleanUrl)
             ){
 
                 html += `
                 <div>
                     <audio controls style="margin-top:5px">
-                        <source src="${url}">
-                        Your browser does not support audio
+                        <source src="${safeUrl}">
                     </audio>
                 </div>`;
             }
@@ -335,16 +334,16 @@ function renderMessage(m){
                 html += `
                 <div>
                     <video controls width="250" style="margin-top:5px">
-                        <source src="${url}">
+                        <source src="${safeUrl}">
                     </video>
                 </div>`;
             }
 
-            // ===== UNKNOWN FILE =====
+            // ===== FALLBACK =====
             else{
                 html += `
                 <div>
-                    📎 <a href="${url}" target="_blank">Open file</a>
+                    📎 <a href="${safeUrl}" target="_blank">Open file</a>
                 </div>`;
             }
 
