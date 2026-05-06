@@ -300,8 +300,14 @@ function renderMessage(m){
 
             // 🔥 FIX: convert to HTTPS upload server
             let safeUrl = url
-                .replace("http://www.viberschat.space:5666", "https://viberschat.space:2053")
-                .replace("http://viberschat.space:5666", "https://viberschat.space:2053");
+              function fixUrl(url){
+
+    if(!url) return "";
+
+    return url
+        .replace(/^http:\/\/www\.viberschat\.space:5666/i, "https://viberschat.space:2053")
+        .replace(/^http:\/\/viberschat\.space:5666/i, "https://viberschat.space:2053");
+}
 
             let cleanUrl = safeUrl.split("?")[0];
 
