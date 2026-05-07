@@ -315,46 +315,53 @@ function renderMessage(m){
 
             let lower = url.toLowerCase();
 
-            // ================= IMAGE =================
-            if(
-                lower.includes(".jpg") ||
-                lower.includes(".jpeg") ||
-                lower.includes(".png") ||
-                lower.includes(".gif") ||
-                lower.includes(".webp")
-            ){
+         // ================= IMAGE =================
+if(
+    lower.includes(".jpg") ||
+    lower.includes(".jpeg") ||
+    lower.includes(".png") ||
+    lower.includes(".gif") ||
+    lower.includes(".webp")
+){
 
-                html += `
-                <div style="margin-top:5px">
-                    <img 
-                        src="${url}"
-                        style="
-                            max-width:220px;
-                            border-radius:10px;
-                            cursor:pointer;
-                            display:block;
-                        "
-                    >
-                </div>`;
-            }
+    html += `
+    <div style="margin-top:5px">
 
-            // ================= AUDIO =================
-            else if(
-                lower.includes(".aac") ||
-                lower.includes(".mp3") ||
-                lower.includes(".m4a") ||
-                lower.includes(".wav") ||
-                lower.includes(".ogg")
-            ){
+        <iframe
+            src="${url}"
+            width="230"
+            height="230"
+            style="
+                border:none;
+                border-radius:10px;
+                background:#000;
+            ">
+        </iframe>
 
-                html += `
-                <div style="margin-top:5px">
-                    <audio controls style="width:230px">
-                        <source src="${url}">
-                    </audio>
-                </div>`;
-            }
+    </div>`;
+}
 
+// ================= AUDIO =================
+else if(
+    lower.includes(".aac") ||
+    lower.includes(".mp3") ||
+    lower.includes(".m4a") ||
+    lower.includes(".wav") ||
+    lower.includes(".ogg")
+){
+
+    html += `
+    <div style="margin-top:5px">
+
+        <iframe
+            src="${url}"
+            width="250"
+            height="60"
+            style="border:none">
+        </iframe>
+
+    </div>`;
+}
             // ================= GOOGLEVIDEO =================
             else if(lower.includes("googlevideo")){
 
