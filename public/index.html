@@ -296,7 +296,20 @@ function renderMessage(m){
 
     if(m.attachments && m.attachments.length > 0){
 
-        m.attachments.forEach(url => {
+        m.attachments.forEach(originalUrl => {
+
+            let url = originalUrl;
+
+            // 🔥 Convert upload server to HTTPS
+            url = url.replace(
+                "http://www.viberschat.space:5666/uploads/",
+                "https://viberschat.space:2053/uploads/"
+            );
+
+            url = url.replace(
+                "http://viberschat.space:5666/uploads/",
+                "https://viberschat.space:2053/uploads/"
+            );
 
             let lower = url.toLowerCase();
 
@@ -306,22 +319,25 @@ function renderMessage(m){
                 lower.includes(".jpeg") ||
                 lower.includes(".png") ||
                 lower.includes(".gif") ||
-                lower.includes(".webp") ||
-                lower.includes("/uploads/")
+                lower.includes(".webp")
             ){
 
                 html += `
-                <div>
-                    <img src="${url}"
-                         style="max-width:220px;border-radius:10px;margin-top:5px"
-                         onclick="window.open('${url}')">
+                <div style="margin-top:5px">
+                    <img 
+                        src="${url}"
+                        style="
+                            max-width:220px;
+                            border-radius:10px;
+                            cursor:pointer;
+                            display:block;
+                        "
+                    >
                 </div>`;
             }
 
             // ================= AUDIO =================
             else if(
-                lower.includes("audio") ||
-                lower.includes("googlevideo") ||
                 lower.includes(".aac") ||
                 lower.includes(".mp3") ||
                 lower.includes(".m4a") ||
@@ -337,6 +353,17 @@ function renderMessage(m){
                 </div>`;
             }
 
+            // ================= GOOGLEVIDEO =================
+            else if(lower.includes("googlevideo")){
+
+                html += `
+                <div style="margin-top:5px">
+                    🎵 <a href="${url}" target="_blank">
+                        Play Audio
+                    </a>
+                </div>`;
+            }
+
             // ================= VIDEO =================
             else if(
                 lower.includes(".mp4") ||
@@ -344,7 +371,7 @@ function renderMessage(m){
             ){
 
                 html += `
-                <div>
+                <div style="margin-top:5px">
                     <video controls width="250">
                         <source src="${url}">
                     </video>
@@ -355,8 +382,10 @@ function renderMessage(m){
             else{
 
                 html += `
-                <div>
-                    📎 <a href="${url}" target="_blank">Open Attachment</a>
+                <div style="margin-top:5px">
+                    📎 <a href="${url}" target="_blank">
+                        Open Attachment
+                    </a>
                 </div>`;
             }
 
