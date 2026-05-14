@@ -7,41 +7,76 @@ const {
     saveJSON
 } = require("./storage");
 
+const activeBots = new Map();
+
 function generatePacketID() {
     return "BOT-" + Date.now();
 }
 
+// ============================
+// START CHILDBOT
+// ============================
+
 function start(config) {
 
-    const socket = new WebSocket(
-        "wss://chatp.net:5333/server"
-    );
+    return new Promise((resolve) => {
 
-    socket.on("open", () => {
-
-        console.log(
-            `${config.username} connected`
+        const socket = new WebSocket(
+            "wss://chatp.net:5333/server"
         );
 
-        socket.send(JSON.stringify({
-            handler: "login",
-            username: config.username,
-            password: config.password,
-            id: generatePacketID()
-        }));
+        let loggedIn = false;
+        let joinedRoom = false;
 
-    });
+        activeBots.set(config.username, socket);
 
-    socket.on("message", async(data) => {
+        // =========================
+        // CONNECT
+        // =========================
 
-        try {
+        socket.on("open", () => {
 
-            const msg = JSON.parse(data);
+            console.log(
+                `[CHILDBOT] Connecting: ${config.username}`
+            );
+
+            socket.send(JSON.stringify({
+                handler: "login",
+                username: config.username,
+                password: config.password,
+                id: generatePacketID()
+            }));
+
+        });
+
+        // =========================
+        // MESSAGE HANDLER
+        // =========================
+
+        socket.on("message", async(data) => {
+
+            let msg;
+
+            try {
+                msg = JSON.parse(data);
+            } catch {
+                return;
+            }
+
+            // =========================
+            // LOGIN SUCCESS
+            // =========================
 
             if (
                 msg.handler === "login_event" &&
                 msg.type === "success"
             ) {
+
+                console.log(
+                    `[CHILDBOT] Login success: ${config.username}`
+                );
+
+                loggedIn = true;
 
                 socket.send(JSON.stringify({
                     handler: "room_join",
@@ -49,12 +84,61 @@ function start(config) {
                     id: generatePacketID()
                 }));
 
+            }
+
+            // =========================
+            // LOGIN FAILED
+            // =========================
+
+            if (
+                msg.handler === "login_event" &&
+                (msg.type === "failed" || msg.type === "error")
+            ) {
+
+                console.log(
+                    `[CHILDBOT] Login FAILED: ${config.username}`
+                );
+
+                resolve({
+                    success: false,
+                    stage: "login_failed"
+                });
+
+                socket.close();
+
+            }
+
+            // =========================
+            // ROOM JOIN SUCCESS
+            // =========================
+
+            if (
+                msg.handler === "room_event" &&
+                msg.type === "you_joined"
+            ) {
+
+                console.log(
+                    `[CHILDBOT] Joined room: ${config.room}`
+                );
+
+                joinedRoom = true;
+
+                // ONLY START QUIZ AFTER JOIN SUCCESS
                 QuizSystem.startQuiz(
                     socket,
                     config.room
                 );
 
+                resolve({
+                    success: true,
+                    stage: "joined_room"
+                });
+
             }
+
+            // =========================
+            // ROOM EVENTS
+            // =========================
 
             if (
                 msg.handler === "room_event"
@@ -68,21 +152,69 @@ function start(config) {
 
             }
 
-        } catch(err) {
+        });
 
-            console.log(err);
+        // =========================
+        // ERROR
+        // =========================
 
-        }
+        socket.on("error", (err) => {
+
+            console.log("[CHILDBOT ERROR]", err);
+
+            resolve({
+                success: false,
+                stage: "socket_error"
+            });
+
+        });
+
+        // =========================
+        // CLOSE
+        // =========================
+
+        socket.on("close", () => {
+
+            console.log(
+                `[CHILDBOT] Closed: ${config.username}`
+            );
+
+            activeBots.delete(config.username);
+
+        });
+
+        // =========================
+        // TIMEOUT SAFETY
+        // =========================
+
+        setTimeout(() => {
+
+            if (!loggedIn || !joinedRoom) {
+
+                console.log(
+                    `[CHILDBOT] Timeout: ${config.username}`
+                );
+
+                resolve({
+                    success: false,
+                    stage: "timeout"
+                });
+
+                socket.close();
+
+            }
+
+        }, 15000);
 
     });
 
 }
 
-async function handleRoomEvent(
-    socket,
-    config,
-    msg
-) {
+// ============================
+// ROOM EVENTS
+// ============================
+
+async function handleRoomEvent(socket, config, msg) {
 
     const type = msg.type;
 
@@ -95,11 +227,8 @@ async function handleRoomEvent(
             `Nice to see you ${msg.username}`
         ];
 
-        const random = welcomes[
-            Math.floor(
-                Math.random() * welcomes.length
-            )
-        ];
+        const random =
+            welcomes[Math.floor(Math.random() * welcomes.length)];
 
         sendRoomMessage(
             socket,
@@ -128,9 +257,7 @@ async function handleRoomEvent(
                 {}
             );
 
-            if (
-                scores[from]
-            ) {
+            if (scores[from]) {
 
                 sendRoomMessage(
                     socket,
@@ -154,13 +281,14 @@ async function handleRoomEvent(
 
 }
 
-function sendRoomMessage(
-    socket,
-    room,
-    body
-) {
+// ============================
+// SEND MESSAGE
+// ============================
+
+function sendRoomMessage(socket, room, body) {
 
     socket.send(JSON.stringify({
+
         handler: "room_message",
         type: "text",
         room,
@@ -168,6 +296,7 @@ function sendRoomMessage(
         url: "",
         length: "0",
         id: generatePacketID()
+
     }));
 
 }
