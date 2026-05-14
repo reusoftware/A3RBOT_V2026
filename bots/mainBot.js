@@ -1,208 +1,146 @@
 const WebSocket = require("ws");
-const ChildBot = require("./childBot");
 
-const {
-    loadJSON,
-    saveJSON
-} = require("./storage");
-
-let BOT_USERNAME = "";
-let BOT_PASSWORD = "";
-
-let socket;
-
-function generatePacketID() {
-    return "BOT-" + Date.now();
-}
+let socket = null;
 
 async function start(username, password) {
 
-    socket = new WebSocket(
-        "wss://chatp.net:5333/server"
-    );
-
-    socket.on("open", () => {
-
-        console.log("Main Bot Connected");
-
-        socket.send(JSON.stringify({
-            handler: "login",
-            username: username,
-            password: password,
-            id: generatePacketID()
-        }));
-
-    });
-
-    socket.on("message", async(data) => {
+    return new Promise((resolve) => {
 
         try {
 
-            const msg = JSON.parse(data);
+            socket = new WebSocket(
+                "wss://chatp.net:5333/server"
+            );
 
-            if (
-                msg.handler === "chat_message"
-            ) {
+            let finished = false;
 
-                await handlePrivateMessage(msg);
+            socket.onopen = () => {
 
-            }
+                console.log("Socket Connected");
 
-        } catch(err) {
+                socket.send(JSON.stringify({
+                    handler: "login",
+                    username: username,
+                    password: password,
+                    id: Date.now().toString()
+                }));
+
+            };
+
+            socket.onmessage = (event) => {
+
+                console.log(event.data);
+
+                let data;
+
+                try {
+
+                    data = JSON.parse(event.data);
+
+                } catch {
+
+                    return;
+
+                }
+
+                // LOGIN SUCCESS
+                if (
+                    data.handler === "login_event" &&
+                    data.type === "success"
+                ) {
+
+                    if (!finished) {
+
+                        finished = true;
+
+                        console.log("LOGIN SUCCESS");
+
+                        resolve({
+                            success: true,
+                            message: "Login Success"
+                        });
+
+                    }
+
+                }
+
+                // LOGIN FAILED
+                if (
+                    data.handler === "login_event" &&
+                    (
+                        data.type === "failed" ||
+                        data.type === "error"
+                    )
+                ) {
+
+                    if (!finished) {
+
+                        finished = true;
+
+                        console.log("LOGIN FAILED");
+
+                        resolve({
+                            success: false,
+                            message: "Wrong Username Or Password"
+                        });
+
+                    }
+
+                }
+
+            };
+
+            socket.onerror = (err) => {
+
+                console.log("Socket Error", err);
+
+                if (!finished) {
+
+                    finished = true;
+
+                    resolve({
+                        success: false,
+                        message: "Socket Error"
+                    });
+
+                }
+
+            };
+
+            socket.onclose = () => {
+
+                console.log("Socket Closed");
+
+            };
+
+            // TIMEOUT FIX
+            setTimeout(() => {
+
+                if (!finished) {
+
+                    finished = true;
+
+                    resolve({
+                        success: false,
+                        message: "Login Timeout"
+                    });
+
+                }
+
+            }, 10000);
+
+        } catch (err) {
 
             console.log(err);
 
+            resolve({
+                success: false,
+                message: "Server Error"
+            });
+
         }
 
     });
-
-    loadSavedBots();
-
-}
-
-async function handlePrivateMessage(msg) {
-
-    if (!msg.body) return;
-
-    const from = msg.from;
-    const body = msg.body.trim();
-
-    if (body === "help") {
-
-        sendPrivate(
-            from,
-`SERVER FUN BOT GUIDE
-
-Request ChildBot:
-j/room#username#password
-
-Example:
-j/MyRoom#child1#pass123
-
-Commands:
-@welcome on
-@welcome off
-@quiz on
-@quiz off
-myscore
-@gtop`
-        );
-
-    }
-
-    if (body.startsWith("j/")) {
-
-        await createChildBot(
-            from,
-            body
-        );
-
-    }
-
-}
-
-async function createChildBot(owner, command) {
-
-    try {
-
-        const data = command
-            .substring(2)
-            .split("#");
-
-        const room = data[0];
-        const username = data[1];
-        const password = data[2];
-
-        if (
-            !room ||
-            !username ||
-            !password
-        ) {
-
-            sendPrivate(
-                owner,
-                "Invalid format."
-            );
-
-            return;
-
-        }
-
-        let bots = loadJSON(
-            "./storage/bots.json"
-        );
-
-        const exists = bots.find(
-            x => x.room === room
-        );
-
-        if (exists) {
-
-            sendPrivate(
-                owner,
-                "Room already has bot."
-            );
-
-            return;
-
-        }
-
-        const botConfig = {
-            room,
-            username,
-            password,
-            owner,
-            welcome: true,
-            quiz: true
-        };
-
-        bots.push(botConfig);
-
-        saveJSON(
-            "./storage/bots.json",
-            bots
-        );
-
-        ChildBot.start(botConfig);
-
-        sendPrivate(
-            owner,
-            `ChildBot created for ${room}`
-        );
-
-    } catch(err) {
-
-        console.log(err);
-
-    }
-
-}
-
-function loadSavedBots() {
-
-    const bots = loadJSON(
-        "./storage/bots.json"
-    );
-
-    bots.forEach(bot => {
-
-        ChildBot.start(bot);
-
-    });
-
-}
-
-function sendPrivate(to, body) {
-
-    socket.send(JSON.stringify({
-        handler: "chat_message",
-        type: "text",
-        to,
-        body,
-        url: "",
-        length: "0",
-        id: generatePacketID()
-    }));
 
 }
 
