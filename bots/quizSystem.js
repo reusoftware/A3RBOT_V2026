@@ -61,22 +61,69 @@ function sendQuestion(socket, room) {
 
 function generateQuestion() {
 
-    const a = Math.floor(Math.random() * 20);
-    const b = Math.floor(Math.random() * 20);
-    const op = ["+", "-", "*"][Math.floor(Math.random() * 3)];
+    const type = Math.floor(Math.random() * 4);
 
+    let question;
     let answer;
 
-    if (op === "+") answer = a + b;
-    if (op === "-") answer = a - b;
-    if (op === "*") answer = a * b;
+    // =========================
+    // TYPE 1: ADDITION
+    // =========================
+    if (type === 0) {
+
+        const a = rand(1, 50);
+        const b = rand(1, 50);
+
+        question = `${a} + ${b} = ?`;
+        answer = a + b;
+    }
+
+    // =========================
+    // TYPE 2: SUBTRACTION
+    // =========================
+    else if (type === 1) {
+
+        const a = rand(20, 100);
+        const b = rand(1, 20);
+
+        question = `${a} - ${b} = ?`;
+        answer = a - b;
+    }
+
+    // =========================
+    // TYPE 3: MULTIPLICATION
+    // =========================
+    else if (type === 2) {
+
+        const a = rand(1, 12);
+        const b = rand(1, 12);
+
+        question = `${a} × ${b} = ?`;
+        answer = a * b;
+    }
+
+    // =========================
+    // TYPE 4: MIX LOGIC
+    // =========================
+    else {
+
+        const a = rand(2, 10);
+        const b = rand(2, 10);
+        const c = rand(1, 5);
+
+        question = `(${a} + ${b}) × ${c} = ?`;
+        answer = (a + b) * c;
+    }
 
     return {
-        question: `${a} ${op} ${b} = ?`,
+        question,
         answer: answer.toString()
     };
 }
 
+function rand(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 // ======================================
 // HANDLE ANSWER
 // ======================================
