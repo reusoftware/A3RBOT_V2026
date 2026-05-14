@@ -1,94 +1,32 @@
-const API = "https://your-backend-url.onrender.com";
+const express = require("express");
 
-let currentBot = "";
+const MainBot = require("./bots/mainBot");
 
-function log(msg) {
-    document.getElementById("output").innerText += msg + "\n";
-}
+const app = express();
 
-async function loginBot() {
-    let botId = document.getElementById("botId").value;
+app.use(express.static("public"));
+app.use(express.json());
 
-    let res = await fetch(API + "/login", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ botId })
-    });
+app.post("/startbot", async(req, res) => {
 
-    currentBot = botId;
-    log("Logged in: " + botId);
-}
+    const username = req.body.username;
+    const password = req.body.password;
 
-async function createChild() {
-    let childId = document.getElementById("childId").value;
+    const result = await MainBot.start(
+        username,
+        password
+    );
 
-    await fetch(API + "/child", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ parent: currentBot, childId })
-    });
+    res.json(result);
 
-    log("Child bot created: " + childId);
-}
+});
 
-async function toggleWelcome() {
-    let room = document.getElementById("room").value;
+const PORT = process.env.PORT || 3000;
 
-    await fetch(API + "/welcome", {
-        method: "POST",
-        body: JSON.stringify({ room }),
-        headers: {"Content-Type":"application/json"}
-    });
+app.listen(PORT, () => {
 
-    log("Welcome toggled: " + room);
-}
+    console.log(
+        "Server running on port " + PORT
+    );
 
-async function startQuiz() {
-    let room = document.getElementById("room").value;
-
-    await fetch(API + "/quiz/start", {
-        method: "POST",
-        body: JSON.stringify({ room }),
-        headers: {"Content-Type":"application/json"}
-    });
-
-    log("Quiz started in " + room);
-}
-
-async function startCricket() {
-    let room = document.getElementById("room").value;
-
-    await fetch(API + "/cricket/start", {
-        method: "POST",
-        body: JSON.stringify({ room }),
-        headers: {"Content-Type":"application/json"}
-    });
-
-    log("Cricket started in " + room);
-}
-
-async function addMaster() {
-    let room = document.getElementById("room").value;
-    let user = document.getElementById("masterName").value;
-
-    await fetch(API + "/master/add", {
-        method: "POST",
-        body: JSON.stringify({ room, user }),
-        headers: {"Content-Type":"application/json"}
-    });
-
-    log("Master added: " + user);
-}
-
-async function removeMaster() {
-    let room = document.getElementById("room").value;
-    let user = document.getElementById("masterName").value;
-
-    await fetch(API + "/master/remove", {
-        method: "POST",
-        body: JSON.stringify({ room, user }),
-        headers: {"Content-Type":"application/json"}
-    });
-
-    log("Master removed: " + user);
-}
+});
