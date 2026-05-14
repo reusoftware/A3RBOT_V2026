@@ -7,71 +7,76 @@ async function start(username, password) {
 
     return new Promise((resolve) => {
 
-        socket = new WebSocket("wss://chatp.net:5333/server");
+        try {
 
-        let finished = false;
+            socket = new WebSocket("wss://chatp.net:5333/server");
 
-        socket.on("open", () => {
+            let finished = false;
 
-            console.log("Socket Connected");
+            socket.onopen = () => {
 
-            socket.send(JSON.stringify({
-                handler: "login",
-                username,
-                password,
-                id: Date.now().toString()
-            }));
-        });
+                console.log("Socket Connected");
 
-        socket.on("message", async (event) => {
+                socket.send(JSON.stringify({
+                    handler: "login",
+                    username,
+                    password,
+                    id: Date.now().toString()
+                }));
 
-            let data;
-            try {
-                data = JSON.parse(event);
-            } catch {
-                return;
-            }
+            };
 
-            console.log("[MAINBOT RAW]", data);
+            socket.onmessage = async (event) => {
 
-            // LOGIN SUCCESS
-            if (data.handler === "login_event" && data.type === "success") {
-
-                if (!finished) {
-                    finished = true;
-
-                    resolve({
-                        success: true,
-                        message: "Login Success"
-                    });
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    return;
                 }
-            }
 
-            // LOGIN FAILED
-            if (data.handler === "login_event" &&
-                (data.type === "failed" || data.type === "error")) {
+                console.log("[MAINBOT RAW]", data);
 
-                if (!finished) {
-                    finished = true;
+                // LOGIN SUCCESS
+                if (data.handler === "login_event" && data.type === "success") {
 
-                    resolve({
-                        success: false,
-                        message: "Wrong credentials"
-                    });
+                    if (!finished) {
+                        finished = true;
+
+                        console.log("MAINBOT LOGIN SUCCESS");
+
+                        resolve({
+                            success: true,
+                            message: "Login Success"
+                        });
+                    }
                 }
-            }
 
-            // PRIVATE MESSAGE
-            if (data.handler === "chat_message") {
+                // LOGIN FAILED
+                if (
+                    data.handler === "login_event" &&
+                    (data.type === "failed" || data.type === "error")
+                ) {
+                    if (!finished) {
+                        finished = true;
 
-                const from = data.from;
-                const body = data.body;
+                        resolve({
+                            success: false,
+                            message: "Wrong credentials"
+                        });
+                    }
+                }
 
-                if (!body) return;
+                // PRIVATE MESSAGE
+                if (data.handler === "chat_message") {
 
-                if (body.toLowerCase() === "help") {
+                    const from = data.from;
+                    const body = data.body;
 
-                    sendPrivate(from,
+                    if (!body) return;
+
+                    if (body.toLowerCase() === "help") {
+                        sendPrivate(from,
 `SERVER BOT GUIDE
 
 Create ChildBot:
@@ -79,41 +84,44 @@ j/room#username#password
 
 Example:
 j/myroom#bot1#123456`
-                    );
+                        );
+                    }
+
+                    if (body.startsWith("j/")) {
+                        handleChildRequest(data);
+                    }
                 }
+            };
 
-                if (body.startsWith("j/")) {
-                    handleChildRequest(data, from);
+            socket.onerror = (err) => {
+                console.log("Socket Error", err);
+            };
+
+            socket.onclose = () => {
+                console.log("Socket Closed");
+            };
+
+            setTimeout(() => {
+                if (!finished) {
+                    finished = true;
+                    resolve({
+                        success: false,
+                        message: "Login Timeout"
+                    });
                 }
-            }
-        });
+            }, 15000);
 
-        socket.onerror = (err) => {
-            console.log("Socket Error", err);
-        };
-
-        socket.onclose = () => {
-            console.log("Socket Closed");
-        };
-
-        setTimeout(() => {
-
-            if (!finished) {
-                finished = true;
-
-                resolve({
-                    success: false,
-                    message: "Login Timeout"
-                });
-            }
-
-        }, 10000);
+        } catch (err) {
+            console.log("MAINBOT CRASH:", err);
+            resolve({
+                success: false,
+                message: "Server Error"
+            });
+        }
     });
 }
 
-// ================= PRIVATE MSG =================
 function sendPrivate(user, message) {
-
     if (!socket) return;
 
     socket.send(JSON.stringify({
@@ -125,10 +133,11 @@ function sendPrivate(user, message) {
     }));
 }
 
-// ================= CHILD REQUEST =================
-function handleChildRequest(data, from) {
+function handleChildRequest(data) {
 
+    const from = data.from;
     const body = data.body;
+
     const text = body.replace("j/", "");
     const split = text.split("#");
 
@@ -138,28 +147,29 @@ function handleChildRequest(data, from) {
 
     const [room, botUsername, botPassword] = split;
 
-    console.log("[MAINBOT] START CHILD:", room, botUsername);
+    console.log("STARTING CHILDBOT:", room, botUsername);
 
     sendPrivate(from, "Starting ChildBot...");
 
+    // IMPORTANT FIX: handle promise safely
     ChildBot.start({
         room,
         username: botUsername,
         password: botPassword
     })
     .then(res => {
-
-        console.log("[CHILDBOT RESULT]", res);
+        console.log("CHILDBOT RESULT:", res);
 
         sendPrivate(from,
-            `ChildBot Result:\nSuccess: ${res.success}\nStage: ${res.stage}`
+`ChildBot Finished
+Success: ${res.success}
+Stage: ${res.stage || "unknown"}`
         );
     })
     .catch(err => {
+        console.log("CHILDBOT ERROR:", err);
 
-        console.log("[CHILDBOT ERROR]", err);
-
-        sendPrivate(from, "ChildBot crashed.");
+        sendPrivate(from, "ChildBot crashed or failed to start.");
     });
 }
 
