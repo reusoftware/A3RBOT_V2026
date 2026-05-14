@@ -370,24 +370,22 @@ async function createChildBot(owner, command) {
         // START BOT
         // =========================
 
-        ChildBot.start(botConfig);
+ sendStatus(`Creating ChildBot: ${botConfig.username}`, "info");
 
-        sendPrivate(
-            owner,
-            `ChildBot created for ${room}`
-        );
+ChildBot.start(botConfig)
+.then(res => {
 
-    } catch(err) {
+    sendStatus(
+        `ChildBot ${botConfig.username} => ${res.success ? "CONNECTED" : "FAILED"}`,
+        res.success ? "success" : "error"
+    );
 
-        console.log(
-            "CREATE BOT ERROR:",
-            err
-        );
+})
+.catch(err => {
 
-    }
+    sendStatus(`ChildBot ERROR: ${botConfig.username}`, "error");
 
-}
-
+});
 // ========================================
 // LOAD SAVED BOTS
 // ========================================
