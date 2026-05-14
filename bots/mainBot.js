@@ -1,6 +1,6 @@
 const WebSocket = require("ws");
 const ChildBot = require("./childBot");
-
+let CHILD_BOTS = [];
 const {
     loadJSON,
     saveJSON
@@ -44,7 +44,22 @@ async function start(username, password) {
             // =========================
             // MESSAGE
             // =========================
+function sendStatus(message, type = "info") {
 
+    console.log("[STATUS]", message);
+
+    // If you have websocket to frontend (you must already have UI socket)
+    if (global.uiSocket) {
+
+        global.uiSocket.send(JSON.stringify({
+            type: "bot_status",
+            message,
+            statusType: type,
+            count: CHILD_BOTS.length
+        }));
+
+    }
+}
             socket.on("message", async(data) => {
 
                 try {
