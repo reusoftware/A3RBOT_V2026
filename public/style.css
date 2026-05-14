@@ -1,0 +1,51 @@
+body{
+    background:#111;
+    font-family:Arial;
+    color:white;
+}
+
+.login-box{
+    width:400px;
+    margin:auto;
+    margin-top:100px;
+    background:#222;
+    padding:20px;
+    border-radius:10px;
+}
+
+h1{
+    text-align:center;
+    color:orange;
+}
+
+input{
+    width:100%;
+    padding:12px;
+    margin-top:10px;
+    border:none;
+    border-radius:5px;
+}
+
+button{
+    width:100%;
+    padding:12px;
+    margin-top:15px;
+    background:orange;
+    border:none;
+    border-radius:5px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+#status{
+    margin-top:15px;
+    color:lime;
+}
+
+#logs{
+    margin-top:20px;
+    background:black;
+    padding:10px;
+    height:200px;
+    overflow:auto;
+}
