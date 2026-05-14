@@ -1,178 +1,173 @@
 const WebSocket = require("ws");
 
-let QuizSystem;
-let loadJSON;
-
-try {
-    QuizSystem = require("./quizSystem");
-} catch (e) {
-    QuizSystem = { startQuiz: () => {}, handleAnswer: () => {} };
-}
-
-try {
-    ({ loadJSON } = require("./storage"));
-} catch (e) {
-    loadJSON = () => ({});
-}
+const QuizSystem = require("./quizSystem");
+const { loadJSON } = require("./storage");
 
 function generatePacketID() {
     return "BOT-" + Date.now();
-}
-
-function safeParse(data) {
-    try {
-        if (!data) return null;
-        return JSON.parse(data.toString());
-    } catch (e) {
-        return null;
-    }
 }
 
 function start(config) {
 
     return new Promise((resolve) => {
 
-        let resolved = false;
+        let socket;
+
+        try {
+
+            socket = new WebSocket("wss://chatp.net:5333/server");
+
+        } catch (err) {
+            return resolve({
+                success: false,
+                stage: "websocket_create_failed"
+            });
+        }
+
         let loggedIn = false;
         let joinedRoom = false;
 
-        const socket = new WebSocket("wss://chatp.net:5333/server");
-
-        function done(result) {
-            if (resolved) return;
-            resolved = true;
-            resolve(result);
-        }
-
         socket.on("open", () => {
 
-            console.log("[CHILDBOT] OPEN:", config.username);
+            console.log(`[CHILDBOT] Connecting: ${config.username}`);
 
-            try {
-                socket.send(JSON.stringify({
-                    handler: "login",
-                    username: config.username,
-                    password: config.password,
-                    id: generatePacketID()
-                }));
-            } catch (e) {
-                done({ success: false, stage: "send_login_failed" });
-            }
+            socket.send(JSON.stringify({
+                handler: "login",
+                username: config.username,
+                password: config.password,
+                id: generatePacketID()
+            }));
         });
 
-        socket.on("message", (data) => {
+        socket.on("message", async (data) => {
 
-            const msg = safeParse(data);
-            if (!msg) return;
+            let msg;
+
+            try {
+                msg = JSON.parse(data);
+            } catch {
+                return;
+            }
 
             console.log("[CHILDBOT RAW]", msg);
 
-            try {
+            // LOGIN SUCCESS
+            if (msg.handler === "login_event" && msg.type === "success") {
 
-                // LOGIN SUCCESS
-                if (msg.handler === "login_event" && msg.type === "success") {
+                loggedIn = true;
 
-                    loggedIn = true;
+                console.log(`[CHILDBOT] Login OK: ${config.username}`);
 
-                    socket.send(JSON.stringify({
-                        handler: "room_join",
-                        name: config.room,
-                        id: generatePacketID()
-                    }));
-                }
+                socket.send(JSON.stringify({
+                    handler: "room_join",
+                    name: config.room,
+                    id: generatePacketID()
+                }));
+            }
 
-                // LOGIN FAILED
-                if (msg.handler === "login_event" &&
-                    (msg.type === "failed" || msg.type === "error")) {
+            // LOGIN FAILED
+            if (msg.handler === "login_event" &&
+                (msg.type === "failed" || msg.type === "error")) {
 
-                    return done({
-                        success: false,
-                        stage: "login_failed"
+                return resolve({
+                    success: false,
+                    stage: "login_failed"
+                });
+            }
+
+            // ROOM JOIN (FIXED CHECK)
+            if (msg.handler === "room_event" && msg.type) {
+
+                if (msg.type.includes("join")) {
+
+                    joinedRoom = true;
+
+                    console.log(`[CHILDBOT] Joined room: ${config.room}`);
+
+                    try {
+                        QuizSystem.startQuiz(socket, config.room);
+                    } catch (err) {
+                        console.log("Quiz error:", err);
+                    }
+
+                    return resolve({
+                        success: true,
+                        stage: "joined_room"
                     });
                 }
+            }
 
-                // ROOM EVENTS
-                if (msg.handler === "room_event") {
-
-                    if (
-                        msg.type === "joined" ||
-                        msg.type === "user_joined" ||
-                        msg.type === "room_joined" ||
-                        msg.type === "you_joined"
-                    ) {
-
-                        joinedRoom = true;
-
-                        try {
-                            QuizSystem.startQuiz(socket, config.room);
-                        } catch (e) {
-                            console.log("[QUIZ ERROR]", e);
-                        }
-
-                        return done({
-                            success: true,
-                            stage: "joined_room"
-                        });
-                    }
-
-                    if (msg.type === "text") {
-
-                        const body = (msg.body || "").toLowerCase();
-                        const from = msg.from;
-
-                        try {
-                            QuizSystem.handleAnswer(socket, config.room, from, body);
-                        } catch (e) {
-                            console.log("[ANSWER ERROR]", e);
-                        }
-
-                        if (body === "myscore") {
-
-                            const scores = loadJSON("./storage/scores.json", {});
-                            const score = scores[from]?.score || 0;
-
-                            try {
-                                socket.send(JSON.stringify({
-                                    handler: "room_message",
-                                    type: "text",
-                                    room: config.room,
-                                    body: `${from} score: ${score}`,
-                                    id: generatePacketID()
-                                }));
-                            } catch (e) {
-                                console.log("[SEND ERROR]", e);
-                            }
-                        }
-                    }
-                }
-
-            } catch (e) {
-                console.log("[CHILDBOT LOOP ERROR]", e);
+            // ROOM EVENTS
+            if (msg.handler === "room_event") {
+                handleRoomEvent(socket, config, msg);
             }
         });
 
         socket.on("error", (err) => {
-            console.log("[CHILDBOT SOCKET ERROR]", err?.message || err);
+            console.log("[CHILDBOT ERROR]", err);
+
+            resolve({
+                success: false,
+                stage: "socket_error"
+            });
         });
 
         socket.on("close", () => {
-            console.log("[CHILDBOT CLOSED]");
+            console.log(`[CHILDBOT CLOSED] ${config.username}`);
         });
 
         setTimeout(() => {
 
-            if (!resolved) {
+            if (!loggedIn || !joinedRoom) {
+                console.log(`[CHILDBOT TIMEOUT] ${config.username}`);
 
-                try { socket.close(); } catch {}
+                try {
+                    socket.close();
+                } catch {}
 
-                done({
+                resolve({
                     success: false,
-                    stage: "timeout_or_no_join"
+                    stage: "timeout"
                 });
             }
 
-        }, 30000);
+        }, 20000);
+
     });
+}
+
+async function handleRoomEvent(socket, config, msg) {
+
+    try {
+
+        const type = msg.type;
+
+        if (type === "text") {
+
+            const body = (msg.body || "").toLowerCase();
+            const from = msg.from;
+
+            QuizSystem.handleAnswer(socket, config.room, from, body);
+
+            if (body === "myscore") {
+
+                const scores = loadJSON("./storage/scores.json", {});
+
+                const score = scores[from]?.score || 0;
+
+                socket.send(JSON.stringify({
+                    handler: "room_message",
+                    type: "text",
+                    room: config.room,
+                    body: `${from} score: ${score}`,
+                    id: generatePacketID()
+                }));
+            }
+        }
+
+    } catch (err) {
+        console.log("ROOM EVENT ERROR:", err);
+    }
 }
 
 module.exports = { start };
