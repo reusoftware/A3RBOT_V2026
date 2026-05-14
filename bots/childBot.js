@@ -17,6 +17,16 @@ function generatePacketID() {
 
 function start(config) {
 
+    // DEFAULT SETTINGS
+    if (!config.roomMasters)
+        config.roomMasters = [];
+
+    if (config.welcome === undefined)
+        config.welcome = true;
+
+    if (config.quiz === undefined)
+        config.quiz = true;
+
     const socket = new WebSocket(
         "wss://chatp.net:5333/server"
     );
@@ -84,10 +94,14 @@ function start(config) {
                 );
 
                 // START QUIZ
-                QuizSystem.startQuiz(
-                    socket,
-                    config.room
-                );
+                if (config.quiz) {
+
+                    QuizSystem.startQuiz(
+                        socket,
+                        config.room
+                    );
+
+                }
 
             }
 
@@ -175,11 +189,6 @@ async function handleRoomEvent(
 
     const type = msg.type;
 
-    console.log(
-        "[ROOM EVENT TYPE]",
-        type
-    );
-
     // ==================================
     // USER JOINED
     // ==================================
@@ -218,7 +227,7 @@ async function handleRoomEvent(
     }
 
     // ==================================
-    // TEXT MESSAGE
+    // ROOM TEXT
     // ==================================
 
     if (
@@ -238,9 +247,9 @@ async function handleRoomEvent(
             `[ROOM MESSAGE] ${from}: ${body}`
         );
 
-        // ==============================
+        // ==========================
         // HELP
-        // ==============================
+        // ==========================
 
         if (body === "help") {
 
@@ -251,22 +260,137 @@ async function handleRoomEvent(
 `BOT COMMANDS
 
 help
+myscore
+
 @welcome on
 @welcome off
+
 @quiz on
 @quiz off
-myscore`
+
+@addmaster username
+@removemaster username`
             );
 
         }
 
-        // ==============================
+        // ==========================
+        // CHECK MASTER
+        // ==========================
+
+        const isMainMaster =
+            from === config.owner;
+
+        const isRoomMaster =
+            config.roomMasters.includes(from);
+
+        const isMaster =
+            isMainMaster || isRoomMaster;
+
+        // ==========================
+        // ADD ROOM MASTER
+        // ==========================
+
+        if (
+            body.startsWith("@addmaster ")
+        ) {
+
+            if (!isMaster) {
+
+                return sendRoomMessage(
+                    socket,
+                    config.room,
+                    "Only masters can add master."
+                );
+
+            }
+
+            const target =
+                body.replace(
+                    "@addmaster ",
+                    ""
+                ).trim();
+
+            if (
+                !config.roomMasters.includes(target)
+            ) {
+
+                config.roomMasters.push(target);
+
+                saveBotConfig(config);
+
+                sendRoomMessage(
+                    socket,
+                    config.room,
+                    `${target} added as room master.`
+                );
+
+            }
+
+        }
+
+        // ==========================
+        // REMOVE ROOM MASTER
+        // ==========================
+
+        if (
+            body.startsWith("@removemaster ")
+        ) {
+
+            if (!isMaster) {
+
+                return sendRoomMessage(
+                    socket,
+                    config.room,
+                    "Only masters can remove master."
+                );
+
+            }
+
+            const target =
+                body.replace(
+                    "@removemaster ",
+                    ""
+                ).trim();
+
+            // CANNOT REMOVE MAIN MASTER
+            if (target === config.owner) {
+
+                return sendRoomMessage(
+                    socket,
+                    config.room,
+                    "Cannot remove main master."
+                );
+
+            }
+
+            config.roomMasters =
+                config.roomMasters.filter(
+                    x => x !== target
+                );
+
+            saveBotConfig(config);
+
+            sendRoomMessage(
+                socket,
+                config.room,
+                `${target} removed from masters.`
+            );
+
+        }
+
+        // ==========================
         // WELCOME ON
-        // ==============================
+        // ==========================
 
         if (body === "@welcome on") {
 
+            if (!isMaster)
+                return;
+
             config.welcome = true;
+
+            saveBotConfig(config);
 
             sendRoomMessage(
                 socket,
@@ -276,13 +400,18 @@ myscore`
 
         }
 
-        // ==============================
+        // ==========================
         // WELCOME OFF
-        // ==============================
+        // ==========================
 
         if (body === "@welcome off") {
 
+            if (!isMaster)
+                return;
+
             config.welcome = false;
+
+            saveBotConfig(config);
 
             sendRoomMessage(
                 socket,
@@ -292,13 +421,18 @@ myscore`
 
         }
 
-        // ==============================
+        // ==========================
         // QUIZ ON
-        // ==============================
+        // ==========================
 
         if (body === "@quiz on") {
 
+            if (!isMaster)
+                return;
+
             config.quiz = true;
+
+            saveBotConfig(config);
 
             QuizSystem.startQuiz(
                 socket,
@@ -313,13 +447,18 @@ myscore`
 
         }
 
-        // ==============================
+        // ==========================
         // QUIZ OFF
-        // ==============================
+        // ==========================
 
         if (body === "@quiz off") {
 
+            if (!isMaster)
+                return;
+
             config.quiz = false;
+
+            saveBotConfig(config);
 
             sendRoomMessage(
                 socket,
@@ -329,9 +468,9 @@ myscore`
 
         }
 
-        // ==============================
+        // ==========================
         // HANDLE ANSWER
-        // ==============================
+        // ==========================
 
         if (config.quiz !== false) {
 
@@ -344,9 +483,9 @@ myscore`
 
         }
 
-        // ==============================
+        // ==========================
         // MYSCORE
-        // ==============================
+        // ==========================
 
         if (body === "myscore") {
 
@@ -357,10 +496,19 @@ myscore`
 
             if (scores[from]) {
 
+                const user =
+                    scores[from];
+
                 sendRoomMessage(
                     socket,
                     config.room,
-                    `${from} score: ${scores[from].score}`
+
+`${from}
+
+Score: ${user.score}
+
+Best Speed:
+${user.bestTime || 0}s`
                 );
 
             } else {
@@ -374,6 +522,34 @@ myscore`
             }
 
         }
+
+    }
+
+}
+
+// ======================================
+// SAVE BOT CONFIG
+// ======================================
+
+function saveBotConfig(config) {
+
+    let bots = loadJSON(
+        "./storage/bots.json",
+        []
+    );
+
+    const index = bots.findIndex(
+        x => x.room === config.room
+    );
+
+    if (index !== -1) {
+
+        bots[index] = config;
+
+        saveJSON(
+            "./storage/bots.json",
+            bots
+        );
 
     }
 
