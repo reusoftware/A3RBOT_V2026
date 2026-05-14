@@ -56,7 +56,7 @@ function start(config) {
         socket.on("message", async(data) => {
 
             let msg;
-
+  console.log("[RAW CHILD BOT]", data.toString());
             try {
                 msg = JSON.parse(data);
             } catch {
@@ -79,10 +79,10 @@ function start(config) {
                 loggedIn = true;
 
                 socket.send(JSON.stringify({
-                    handler: "room_join",
-                    name: config.room,
-                    id: generatePacketID()
-                }));
+    handler: "room_join",
+    id: generatePacketID(),
+    name: config.room
+}));
 
             }
 
@@ -114,7 +114,14 @@ function start(config) {
 
             if (
                 msg.handler === "room_event" &&
-                msg.type === "you_joined"
+             if (
+    msg.handler === "room_event" &&
+    (
+        msg.type === "joined" ||
+        msg.type === "user_joined" ||
+        msg.type === "room_joined"
+    )
+) {
             ) {
 
                 console.log(
