@@ -1,5 +1,5 @@
 const WebSocket = require("ws");
-const ChildBot = require("./childbot/childbot");
+const ChildBot = require("./childbot.js");
 
 let socket = null;
 
