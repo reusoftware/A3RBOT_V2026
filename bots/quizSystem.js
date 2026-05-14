@@ -1,124 +1,150 @@
-
 const {
     loadJSON,
     saveJSON
 } = require("./storage");
 
-const activeQuiz = {};
+let activeQuiz = {}; 
+// room -> { question, answer, startTime }
 
-const questions = [
-    {
-        q: "4*(1+2)*7+5",
-        a: "89"
-    },
-    {
-        q: "(8-1)-8",
-        a: "-1"
-    },
-    {
-        q: "4-(2*2*7)+2",
-        a: "-22"
-    }
-];
+let timers = {};
 
-function generatePacketID() {
-    return "BOT-" + Date.now();
-}
+// ======================================
+// START QUIZ
+// ======================================
 
 function startQuiz(socket, room) {
 
-    setInterval(() => {
+    if (!room) return;
 
-        const random = questions[
-            Math.floor(
-                Math.random() * questions.length
-            )
-        ];
+    // prevent multiple loops
+    if (timers[room]) return;
 
-        activeQuiz[room] = {
-            answer: random.a,
-            startTime: Date.now()
-        };
+    console.log("[QUIZ STARTED]", room);
 
-        sendRoomMessage(
-            socket,
-            room,
-            `Quiz: ${random.q} = ?`
-        );
+    sendQuestion(socket, room);
 
-    }, 60000);
+    timers[room] = setInterval(() => {
+
+        sendQuestion(socket, room);
+
+    }, 30000); // every 30 sec
 
 }
 
-function handleAnswer(
-    socket,
-    room,
-    user,
-    message
-) {
+// ======================================
+// SEND QUESTION
+// ======================================
 
-    const quiz = activeQuiz[room];
+function sendQuestion(socket, room) {
 
-    if (!quiz) return;
+    const q = generateQuestion();
 
-    if (
-        message === quiz.answer
-    ) {
-
-        const speed = (
-            (Date.now() - quiz.startTime)
-            / 1000
-        ).toFixed(2);
-
-        const scores = loadJSON(
-            "./storage/scores.json",
-            {}
-        );
-
-        if (!scores[user]) {
-
-            scores[user] = {
-                score: 0
-            };
-
-        }
-
-        scores[user].score += 5;
-
-        saveJSON(
-            "./storage/scores.json",
-            scores
-        );
-
-        sendRoomMessage(
-            socket,
-            room,
-            `${user} answered correctly! Speed: ${speed}s Total Score: ${scores[user].score}`
-        );
-
-        delete activeQuiz[room];
-
-    }
-
-}
-
-function sendRoomMessage(
-    socket,
-    room,
-    body
-) {
+    activeQuiz[room] = {
+        question: q.question,
+        answer: q.answer,
+        startTime: Date.now()
+    };
 
     socket.send(JSON.stringify({
         handler: "room_message",
         type: "text",
         room,
-        body,
-        url: "",
-        length: "0",
-        id: generatePacketID()
+        body: `🧠 QUIZ: ${q.question}`,
+        id: "quiz-" + Date.now()
     }));
 
 }
+
+// ======================================
+// SIMPLE QUESTION GENERATOR
+// ======================================
+
+function generateQuestion() {
+
+    const a = Math.floor(Math.random() * 20);
+    const b = Math.floor(Math.random() * 20);
+    const op = ["+", "-", "*"][Math.floor(Math.random() * 3)];
+
+    let answer;
+
+    if (op === "+") answer = a + b;
+    if (op === "-") answer = a - b;
+    if (op === "*") answer = a * b;
+
+    return {
+        question: `${a} ${op} ${b} = ?`,
+        answer: answer.toString()
+    };
+}
+
+// ======================================
+// HANDLE ANSWER
+// ======================================
+
+function handleAnswer(socket, room, user, message) {
+
+    const quiz = activeQuiz[room];
+
+    if (!quiz) return;
+
+    if (message !== quiz.answer) return;
+
+    const now = Date.now();
+    const timeTaken = (now - quiz.startTime) / 1000;
+
+    let scores = loadJSON("./storage/scores.json", {});
+
+    if (!scores[user]) {
+
+        scores[user] = {
+            score: 0,
+            bestTime: null
+        };
+
+    }
+
+    // SCORE SYSTEM
+    const baseScore = 10;
+
+    let bonus = 0;
+
+    if (timeTaken < 3) bonus = 5;
+    else if (timeTaken < 6) bonus = 3;
+
+    const totalGain = baseScore + bonus;
+
+    scores[user].score += totalGain;
+
+    // BEST TIME
+    if (
+        !scores[user].bestTime ||
+        timeTaken < scores[user].bestTime
+    ) {
+        scores[user].bestTime = timeTaken;
+    }
+
+    saveJSON("./storage/scores.json", scores);
+
+    socket.send(JSON.stringify({
+        handler: "room_message",
+        type: "text",
+        room,
+        body:
+`✅ ${user} CORRECT!
+
+⚡ Time: ${timeTaken.toFixed(2)}s
+➕ Score +${totalGain}
+🏆 Total: ${scores[user].score}
+🔥 Best Time: ${scores[user].bestTime.toFixed(2)}s`
+    }));
+
+    // NEW QUESTION AFTER CORRECT
+    setTimeout(() => {
+        sendQuestion(socket, room);
+    }, 2000);
+}
+
+// ======================================
 
 module.exports = {
     startQuiz,
