@@ -1,25 +1,13 @@
-const express = require("express");
-
 const MainBot = require("./bots/mainBot");
 
-const app = express();
+async function boot() {
 
-app.use(express.static("public"));
-app.use(express.json());
-
-app.post("/startbot", async(req, res) => {
-
-    const username = req.body.username;
-    const password = req.body.password;
+    console.log("Starting MainBot...");
 
     const result = await MainBot.start(
-        username,
-        password
+        process.env.BOT_USERNAME,
+        process.env.BOT_PASSWORD
     );
-
-    res.json(result);
-
-});
 
 const PORT = process.env.PORT || 3000;
 
