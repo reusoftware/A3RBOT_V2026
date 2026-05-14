@@ -246,7 +246,41 @@ async function handleRoomEvent(
         console.log(
             `[ROOM MESSAGE] ${from}: ${body}`
         );
+// ==============================
+// MASTER LIST
+// ==============================
 
+if (body === "maslist") {
+
+    const isMainMaster = from === config.owner;
+    const isRoomMaster = config.roomMasters.includes(from);
+
+    if (!isMainMaster && !isRoomMaster) {
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "Only masters can view master list."
+        );
+    }
+
+    if (!config.roomMasters || config.roomMasters.length === 0) {
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "No room masters yet."
+        );
+    }
+
+    let list = config.roomMasters
+        .map((m, i) => `${i + 1}. ${m}`)
+        .join("\n");
+
+    sendRoomMessage(
+        socket,
+        config.room,
+        `📋 ROOM MASTERS:\n\n${list}`
+    );
+}
         // ==========================
         // HELP
         // ==========================
@@ -329,55 +363,65 @@ myscore
 
         }
 
-        // ==========================
-        // REMOVE ROOM MASTER
-        // ==========================
+   // ==============================
+// REMOVE MASTER BY NUMBER
+// ==============================
 
-        if (
-            body.startsWith("@removemaster ")
-        ) {
+if (body.startsWith("@removemaster ")) {
 
-            if (!isMaster) {
+    const isMainMaster = from === config.owner;
+    const isRoomMaster = config.roomMasters.includes(from);
 
-                return sendRoomMessage(
-                    socket,
-                    config.room,
-                    "Only masters can remove master."
-                );
+    if (!isMainMaster && !isRoomMaster) {
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "Only masters can remove master."
+        );
+    }
 
-            }
+    const indexStr = body.replace("@removemaster ", "").trim();
+    const index = parseInt(indexStr) - 1;
 
-            const target =
-                body.replace(
-                    "@removemaster ",
-                    ""
-                ).trim();
+    if (isNaN(index)) {
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "Use number from maslist.\nExample: @removemaster 1"
+        );
+    }
 
-            // CANNOT REMOVE MAIN MASTER
-            if (target === config.owner) {
+    if (
+        index < 0 ||
+        index >= config.roomMasters.length
+    ) {
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "Invalid master number."
+        );
+    }
 
-                return sendRoomMessage(
-                    socket,
-                    config.room,
-                    "Cannot remove main master."
-                );
+    const removed = config.roomMasters[index];
 
-            }
+    if (removed === config.owner) {
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "Cannot remove main master."
+        );
+    }
 
-            config.roomMasters =
-                config.roomMasters.filter(
-                    x => x !== target
-                );
+    config.roomMasters.splice(index, 1);
 
-            saveBotConfig(config);
+    saveBotConfig(config);
 
-            sendRoomMessage(
-                socket,
-                config.room,
-                `${target} removed from masters.`
-            );
-
-        }
+    sendRoomMessage(
+        socket,
+        config.room,
+        `❌ Removed master: ${removed}`
+    );
+}
 
         // ==========================
         // WELCOME ON
