@@ -5,22 +5,6 @@ const { loadJSON, saveJSON } = require("./storage");
 let socket;
 let CHILD_BOTS = [];
 
-function sendStatus(message, type = "info") {
-
-    const payload = {
-        type: "bot_status",
-        message,
-        statusType: type,
-        count: CHILD_BOTS.length
-    };
-
-    if (global.uiSocket?.readyState === 1) {
-        global.uiSocket.send(JSON.stringify(payload));
-    }
-
-    console.log("[STATUS]", message);
-}
-
 function start(username, password) {
 
     return new Promise((resolve) => {
@@ -37,6 +21,7 @@ function start(username, password) {
                 password,
                 id: Date.now().toString()
             }));
+
         });
 
         socket.on("message", async (data) => {
@@ -50,8 +35,6 @@ function start(username, password) {
 
                 if (msg.type === "success") {
 
-                    sendStatus("Main Bot Online", "success");
-
                     if (!done) {
                         done = true;
                         resolve({ success: true });
@@ -59,8 +42,6 @@ function start(username, password) {
                 }
 
                 if (msg.type === "failed") {
-
-                    sendStatus("Login Failed", "error");
 
                     if (!done) {
                         done = true;
@@ -74,11 +55,10 @@ function start(username, password) {
             }
         });
 
-        loadSavedBots();
-
         setTimeout(() => {
             if (!done) resolve({ success: false });
         }, 15000);
+
     });
 }
 
@@ -88,14 +68,7 @@ function handlePM(msg) {
     const body = (msg.body || "").trim();
 
     if (body === "help") {
-
-        socket.send(JSON.stringify({
-            handler: "chat_message",
-            type: "text",
-            to: from,
-            body: "j/room#user#pass",
-            id: Date.now().toString()
-        }));
+        send(from, "j/room#user#pass");
     }
 
     if (body.startsWith("j/")) {
@@ -107,33 +80,32 @@ async function createBot(owner, cmd) {
 
     const [room, user, pass] = cmd.substring(2).split("#");
 
+    const exists = loadJSON("./storage/bots.json", []);
+
+    if (exists.find(x => x.room === room)) {
+        return send(owner, "Room already has bot");
+    }
+
     const bot = { room, username: user, password: pass, owner };
 
-    sendStatus("Creating " + user, "info");
+    exists.push(bot);
+    saveJSON("./storage/bots.json", exists);
 
     const res = await ChildBot.start(bot);
 
     if (res.success) CHILD_BOTS.push(user);
 
-    sendStatus("ChildBot " + user + " " + res.success, res.success ? "success" : "error");
+    send(owner, res.success ? "ChildBot CREATED + JOINED" : "FAILED");
+}
 
+function send(to, body) {
     socket.send(JSON.stringify({
         handler: "chat_message",
         type: "text",
-        to: owner,
-        body: res.success ? "ChildBot OK" : "ChildBot Failed",
+        to,
+        body,
         id: Date.now().toString()
     }));
-}
-
-function loadSavedBots() {
-
-    const bots = loadJSON("./storage/bots.json", []);
-
-    bots.forEach(async b => {
-        const res = await ChildBot.start(b);
-        if (res.success) CHILD_BOTS.push(b.username);
-    });
 }
 
 module.exports = { start };
