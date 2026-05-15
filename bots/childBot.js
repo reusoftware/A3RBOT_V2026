@@ -68,8 +68,13 @@ function start(config) {
 
                     ready = true;
                       // 🔥 SEND BACK CONFIRMATION (IMPORTANT FIX)                 
- send(socket, config.room,
-`Im a Robot,Ready to Work.`);
+socket.send(JSON.stringify({
+        handler: "room_message",
+        type: "text",
+        room,
+        body: "Im Ready to Work."
+        `
+    }));
                     console.log("[ROOM READY]", config.room);
 
                   
