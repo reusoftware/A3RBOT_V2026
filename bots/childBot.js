@@ -6,21 +6,53 @@ function packet() {
     return "BOT-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
 
+const ACTIVE_BOTS = {};
+
 function start(config) {
 
     return new Promise((resolve) => {
 
+        // prevent duplicate bot
+        if (ACTIVE_BOTS[config.room]) {
+
+            console.log("[ALREADY RUNNING]", config.room);
+
+            return resolve({
+                success: true,
+                alreadyRunning: true,
+                bot: ACTIVE_BOTS[config.room]
+            });
+        }
+
         let joined = false;
+        let reconnecting = false;
 
         const socket = new WebSocket(
             "wss://chatp.net:5333/server"
         );
 
-        console.log("[BOT START]", config.username);
+        let pingInterval = null;
 
-        // ================= OPEN =================
+        console.log(
+            "[BOT START]",
+            config.username
+        );
+
+        ACTIVE_BOTS[config.room] = {
+            socket,
+            config
+        };
+
+        // =========================
+        // OPEN
+        // =========================
 
         socket.on("open", () => {
+
+            console.log(
+                "[CONNECTED]",
+                config.username
+            );
 
             socket.send(JSON.stringify({
                 handler: "login",
@@ -28,9 +60,12 @@ function start(config) {
                 password: config.password,
                 id: packet()
             }));
+
         });
 
-        // ================= MESSAGE =================
+        // =========================
+        // MESSAGE
+        // =========================
 
         socket.on("message", (data) => {
 
@@ -42,20 +77,25 @@ function start(config) {
                 return;
             }
 
-            // ================= LOGIN =================
+            // ================= LOGIN SUCCESS =================
 
             if (
                 msg.handler === "login_event" &&
                 msg.type === "success"
             ) {
 
-                console.log("[LOGIN OK]", config.username);
+                console.log(
+                    "[LOGIN SUCCESS]",
+                    config.username
+                );
 
                 socket.send(JSON.stringify({
                     handler: "room_join",
                     name: config.room,
                     id: packet()
                 }));
+
+                return;
             }
 
             // ================= LOGIN FAILED =================
@@ -64,6 +104,13 @@ function start(config) {
                 msg.handler === "login_event" &&
                 msg.type === "failed"
             ) {
+
+                console.log(
+                    "[LOGIN FAILED]",
+                    config.username
+                );
+
+                delete ACTIVE_BOTS[config.room];
 
                 return resolve({
                     success: false
@@ -74,7 +121,7 @@ function start(config) {
 
             if (msg.handler === "room_event") {
 
-                // ROOM READY
+                // room ready
                 if (
                     msg.type === "you_joined" &&
                     !joined
@@ -82,7 +129,10 @@ function start(config) {
 
                     joined = true;
 
-                    console.log("[ROOM READY]", config.room);
+                    console.log(
+                        "[ROOM JOINED]",
+                        config.room
+                    );
 
                     sendRoom(
                         socket,
@@ -90,31 +140,47 @@ function start(config) {
                         "🤖 Bot Online"
                     );
 
-                    // start quiz AFTER room ready
+                    // start quiz once only
                     if (config.quiz !== false) {
 
                         setTimeout(() => {
 
-                            QuizSystem.startQuiz(
-                                socket,
-                                config.room
-                            );
+                            if (
+                                socket.readyState === 1
+                            ) {
 
-                        }, 5000);
+                                QuizSystem.startQuiz(
+                                    socket,
+                                    config.room
+                                );
+                            }
+
+                        }, 4000);
                     }
 
-                    resolve({
-                        success: true,
-                        bot: {
-                            socket,
-                            config
-                        }
-                    });
+                    // keep alive
+                    pingInterval = setInterval(() => {
 
-                    return;
+                        if (
+                            socket.readyState === 1
+                        ) {
+
+                            socket.send(JSON.stringify({
+                                handler: "ping",
+                                id: packet()
+                            }));
+
+                        }
+
+                    }, 20000);
+
+                    return resolve({
+                        success: true,
+                        bot: ACTIVE_BOTS[config.room]
+                    });
                 }
 
-                // user joined
+                // welcome
                 if (
                     msg.type === "user_joined" &&
                     config.welcome
@@ -127,7 +193,7 @@ function start(config) {
                     );
                 }
 
-                // text
+                // text commands
                 if (msg.type === "text") {
 
                     handleCommands(
@@ -137,49 +203,68 @@ function start(config) {
                     );
                 }
             }
+
         });
 
-        // ================= CLOSE =================
+        // =========================
+        // CLOSE
+        // =========================
 
         socket.on("close", () => {
 
-            console.log("[BOT CLOSED]", config.username);
+            console.log(
+                "[BOT CLOSED]",
+                config.username
+            );
 
-            setTimeout(() => {
-                start(config);
-            }, 5000);
-        });
-
-        // ================= ERROR =================
-
-        socket.on("error", (e) => {
-            console.log("[BOT ERROR]", e.message);
-        });
-
-        // ================= KEEP ALIVE =================
-
-        setInterval(() => {
-
-            if (socket.readyState === 1) {
-
-                socket.send(JSON.stringify({
-                    handler: "ping",
-                    id: packet()
-                }));
+            if (pingInterval) {
+                clearInterval(pingInterval);
             }
 
-        }, 20000);
+            delete ACTIVE_BOTS[config.room];
+
+            // prevent reconnect spam
+            if (reconnecting) return;
+
+            reconnecting = true;
+
+            setTimeout(() => {
+
+                console.log(
+                    "[RECONNECTING]",
+                    config.username
+                );
+
+                start(config);
+
+            }, 8000);
+
+        });
+
+        // =========================
+        // ERROR
+        // =========================
+
+        socket.on("error", (e) => {
+
+            console.log(
+                "[BOT ERROR]",
+                e.message
+            );
+
+        });
 
     });
 }
 
-// =====================================
+// ======================================
 // COMMANDS
-// =====================================
+// ======================================
 
 function handleCommands(socket, config, msg) {
 
-    const body = (msg.body || "")
+    const body =
+        (msg.body || "")
         .trim()
         .toLowerCase();
 
@@ -187,8 +272,10 @@ function handleCommands(socket, config, msg) {
 
     if (!body) return;
 
-    // quiz answers
+    // ================= QUIZ ANSWER =================
+
     if (config.quiz !== false) {
+
         QuizSystem.handleAnswer(
             socket,
             config.room,
@@ -212,14 +299,11 @@ myscore
 +quiz
 -quiz
 +wc
--wc
-maslist
-mas+username
-mas-number`
+-wc`
         );
     }
 
-    // ================= QUIZ =================
+    // ================= QUIZ ON =================
 
     if (body === "+quiz") {
 
@@ -235,9 +319,11 @@ mas-number`
         return sendRoom(
             socket,
             config.room,
-            "Quiz enabled"
+            "Quiz Enabled"
         );
     }
+
+    // ================= QUIZ OFF =================
 
     if (body === "-quiz") {
 
@@ -248,11 +334,11 @@ mas-number`
         return sendRoom(
             socket,
             config.room,
-            "Quiz disabled"
+            "Quiz Disabled"
         );
     }
 
-    // ================= WELCOME =================
+    // ================= WC ON =================
 
     if (body === "+wc") {
 
@@ -263,9 +349,11 @@ mas-number`
         return sendRoom(
             socket,
             config.room,
-            "Welcome enabled"
+            "Welcome Enabled"
         );
     }
+
+    // ================= WC OFF =================
 
     if (body === "-wc") {
 
@@ -276,7 +364,7 @@ mas-number`
         return sendRoom(
             socket,
             config.room,
-            "Welcome disabled"
+            "Welcome Disabled"
         );
     }
 
@@ -289,9 +377,7 @@ mas-number`
             {}
         );
 
-        const s = scores[from];
-
-        if (!s) {
+        if (!scores[from]) {
 
             return sendRoom(
                 socket,
@@ -305,17 +391,19 @@ mas-number`
             config.room,
 
 `${from}
-
-Score: ${s.score}`
+Score: ${scores[from].score}`
         );
     }
 }
 
-// =====================================
+// ======================================
 
 function sendRoom(socket, room, body) {
 
-    if (socket.readyState !== 1) return;
+    if (
+        !socket ||
+        socket.readyState !== 1
+    ) return;
 
     socket.send(JSON.stringify({
         handler: "room_message",
@@ -326,7 +414,7 @@ function sendRoom(socket, room, body) {
     }));
 }
 
-// =====================================
+// ======================================
 
 function saveBot(config) {
 
@@ -350,4 +438,7 @@ function saveBot(config) {
     }
 }
 
-module.exports = { start };
+module.exports = {
+    start,
+    ACTIVE_BOTS
+};
