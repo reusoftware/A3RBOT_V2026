@@ -2,46 +2,34 @@ const WebSocket = require("ws");
 const QuizSystem = require("./quizSystem");
 const { loadJSON } = require("./storage");
 
-const ACTIVE_BOTS = new Map();
-
-function id() {
+function generatePacketID() {
     return "BOT-" + Date.now();
 }
 
 function start(config) {
 
-    // ❗ PREVENT DUPLICATE INSTANCE
-    if (ACTIVE_BOTS.has(config.username)) {
-        console.log("[BLOCKED DUPLICATE BOT]", config.username);
-        return Promise.resolve({
-            success: false,
-            reason: "duplicate_instance"
-        });
-    }
-
-    ACTIVE_BOTS.set(config.username, true);
-
     return new Promise((resolve) => {
 
         const socket = new WebSocket("wss://chatp.net:5333/server");
 
-        let loggedIn = false;
-        let joinedRoom = false;
-        let quizStarted = false;
+        let joined = false;
+        let alive = true;
 
         console.log("[CHILDBOT START]", config.username);
 
+        // ================= CONNECT =================
         socket.on("open", () => {
 
             socket.send(JSON.stringify({
                 handler: "login",
                 username: config.username,
                 password: config.password,
-                id: id()
+                id: generatePacketID()
             }));
 
         });
 
+        // ================= MESSAGE =================
         socket.on("message", (data) => {
 
             let msg;
@@ -52,126 +40,120 @@ function start(config) {
             }
 
             // ================= LOGIN =================
-            if (msg.handler === "login_event") {
+            if (msg.handler === "login_event" && msg.type === "success") {
 
-                if (msg.type === "success") {
-
-                    loggedIn = true;
-
-                    socket.send(JSON.stringify({
-                        handler: "room_join",
-                        name: config.room,
-                        id: id()
-                    }));
-                }
-
-                if (msg.type === "failed") {
-
-                    ACTIVE_BOTS.delete(config.username);
-
-                    return resolve({
-                        success: false,
-                        reason: "login_failed"
-                    });
-                }
+                socket.send(JSON.stringify({
+                    handler: "room_join",
+                    name: config.room,
+                    id: generatePacketID()
+                }));
             }
 
-            // ================= ROOM =================
+            // ================= ROOM JOIN =================
             if (msg.handler === "room_event") {
 
-                if (msg.type === "you_joined") {
+                // ROOM READY
+                if (msg.type === "you_joined" && !joined) {
 
-                    if (joinedRoom) return;
-                    joinedRoom = true;
+                    joined = true;
 
-                    console.log("[ROOM JOINED]", config.room);
+                    console.log("[CHILDBOT JOINED ROOM]", config.room);
 
-                    // ✔ ONLY ONE READY MESSAGE
-                    socket.send(JSON.stringify({
-                        handler: "room_message",
-                        type: "text",
-                        room: config.room,
-                        body: "🤖 Bot online and ready!",
-                        id: id()
-                    }));
+                    // START QUIZ ONLY ONCE
+                    setTimeout(() => {
+                        QuizSystem.startQuiz(socket, config.room);
+                    }, 1500);
 
-                    // ✔ START QUIZ ONCE ONLY
-                    if (!quizStarted) {
-
-                        quizStarted = true;
-
-                        setTimeout(() => {
-
-                            QuizSystem.startQuiz(socket, config.room);
-
-                        }, 5000);
-                    }
-
-                    return resolve({
+                    resolve({
                         success: true,
-                        socket,
+                        username: config.username,
                         room: config.room,
-                        username: config.username
+                        socket
                     });
                 }
 
                 handleRoom(socket, config, msg);
             }
+
+            // LOGIN FAIL
+            if (msg.handler === "login_event" && msg.type === "failed") {
+                resolve({ success: false });
+            }
         });
 
         socket.on("close", () => {
-
             console.log("[CHILDBOT CLOSED]", config.username);
-
-            ACTIVE_BOTS.delete(config.username);
-
+            alive = false;
         });
 
         socket.on("error", (e) => {
-
             console.log("[CHILDBOT ERROR]", e.message);
-
-            ACTIVE_BOTS.delete(config.username);
-
         });
 
+        // ================= KEEP ALIVE =================
+        setInterval(() => {
+            if (socket.readyState === 1 && alive) {
+                socket.send(JSON.stringify({
+                    handler: "ping",
+                    id: generatePacketID()
+                }));
+            }
+        }, 20000);
     });
 }
 
-// ================= ROOM =================
+// ================= ROOM HANDLER =================
 function handleRoom(socket, config, msg) {
 
-    if (msg.type !== "text") return;
+    if (!msg.type) return;
 
-    const body = (msg.body || "").trim().toLowerCase();
+    const body = (msg.body || "").toLowerCase().trim();
     const from = msg.from;
 
+    // QUIZ ANSWER
     QuizSystem.handleAnswer(socket, config.room, from, body);
 
+    // HELP
     if (body === "help") {
 
-        socket.send(JSON.stringify({
-            handler: "room_message",
-            type: "text",
-            room: config.room,
-            body: "help | myscore",
-            id: id()
-        }));
+        send(socket, config.room,
+`BOT COMMANDS:
+help
+myscore
++quiz
+-quiz
++wc
+-wc
+maslist
+mas+name
+mas-number`);
     }
 
+    // SCORE
     if (body === "myscore") {
 
         const scores = loadJSON("./storage/scores.json", {});
-        const u = scores[from];
 
-        socket.send(JSON.stringify({
-            handler: "room_message",
-            type: "text",
-            room: config.room,
-            body: u ? `${from} score: ${u.score}` : "No score yet",
-            id: id()
-        }));
+        const user = scores[from];
+
+        send(socket, config.room,
+            user
+                ? `${from} score: ${user.score}`
+                : `${from} no score yet`
+        );
     }
 }
 
-module.exports = { start, ACTIVE_BOTS };
+// ================= SEND =================
+function send(socket, room, body) {
+
+    socket.send(JSON.stringify({
+        handler: "room_message",
+        type: "text",
+        room,
+        body,
+        id: generatePacketID()
+    }));
+}
+
+module.exports = { start };
