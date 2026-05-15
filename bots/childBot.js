@@ -73,7 +73,7 @@ async function handleRoomEvent(socket, config, msg) {
     const type = msg.type;
 if (type === "you_joined") {
 sendRoomMessage(socket, config.room,
-                `"Im Ready to Work!"`
+                `"Im a bot Ready to Work!"`
             );
 }
     // ================= USER JOIN =================
