@@ -2,392 +2,269 @@ const WebSocket = require("ws");
 const ChildBot = require("./childBot");
 const { loadJSON, saveJSON } = require("./storage");
 
-let socket;
+let socket = null;
 
-// ACTIVE CHILD BOTS
 let CHILD_BOTS = {};
+let MAIN_READY = false;
 
-function generateID() {
-    return "MAIN-" + Date.now();
+function packet() {
+    return "MAIN-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
 
-// ========================================
+// =====================================
 // START MAIN BOT
-// ========================================
+// =====================================
 
 function start(username, password) {
 
     return new Promise((resolve) => {
 
-        socket = new WebSocket(
-            "wss://chatp.net:5333/server"
-        );
+        socket = new WebSocket("wss://chatp.net:5333/server");
 
         let finished = false;
 
-        // ================= CONNECT =================
         socket.on("open", () => {
 
-            console.log("[MAINBOT CONNECTED]");
+            console.log("[MAIN CONNECTED]");
 
             socket.send(JSON.stringify({
                 handler: "login",
                 username,
                 password,
-                id: generateID()
+                id: packet()
             }));
-
         });
 
-        // ================= MESSAGE =================
         socket.on("message", async(data) => {
 
             let msg;
 
             try {
-                msg = JSON.parse(data);
+                msg = JSON.parse(data.toString());
             } catch {
                 return;
             }
 
-            console.log("[MAINBOT RAW]", msg);
-
             // ================= LOGIN =================
+
             if (msg.handler === "login_event") {
 
                 if (msg.type === "success") {
 
-                    console.log("[MAINBOT LOGIN SUCCESS]");
+                    MAIN_READY = true;
+
+                    console.log("[MAIN LOGIN SUCCESS]");
+
+                    if (!finished) {
+                        finished = true;
+                        resolve({ success: true });
+                    }
 
                     loadSavedBots();
-
-                    if (!finished) {
-
-                        finished = true;
-
-                        resolve({
-                            success: true
-                        });
-
-                    }
                 }
 
-                if (
-                    msg.type === "failed" ||
-                    msg.type === "error"
-                ) {
+                if (msg.type === "failed") {
 
-                    console.log("[MAINBOT LOGIN FAILED]");
+                    console.log("[MAIN LOGIN FAILED]");
 
                     if (!finished) {
-
                         finished = true;
-
-                        resolve({
-                            success: false
-                        });
-
+                        resolve({ success: false });
                     }
                 }
             }
 
-            // ================= PRIVATE MESSAGE =================
-            if (
-                msg.handler === "chat_message"
-            ) {
+            // ================= PM =================
 
+            if (msg.handler === "chat_message") {
                 handlePM(msg);
-
             }
-
         });
 
-        // ================= CLOSE =================
         socket.on("close", () => {
 
-            console.log("[MAINBOT CLOSED]");
+            console.log("[MAIN CLOSED]");
 
+            MAIN_READY = false;
+
+            setTimeout(() => {
+                start(username, password);
+            }, 5000);
         });
 
-        // ================= ERROR =================
-        socket.on("error", (err) => {
-
-            console.log(
-                "[MAINBOT ERROR]",
-                err.message
-            );
-
+        socket.on("error", (e) => {
+            console.log("[MAIN ERROR]", e.message);
         });
+
+        // keep alive
+        setInterval(() => {
+
+            if (socket.readyState === 1) {
+
+                socket.send(JSON.stringify({
+                    handler: "ping",
+                    id: packet()
+                }));
+            }
+
+        }, 20000);
 
     });
-
 }
 
-// ========================================
-// HANDLE PM
-// ========================================
+// =====================================
+// PM COMMANDS
+// =====================================
 
 function handlePM(msg) {
 
     const from = msg.from;
+    const body = (msg.body || "").trim();
 
-    const body =
-        (msg.body || "")
-        .trim();
+    console.log("[PM]", from, body);
 
-    console.log(
-        "[PM]",
-        from,
-        body
-    );
+    // ================= HELP =================
 
-    // HELP
-    if (
-        body.toLowerCase() === "help"
-    ) {
+    if (body.toLowerCase() === "help") {
 
-        return send(
-            from,
+        return send(from,
+`BOT CREATOR
 
-`To Create Bot:
-
+Create Bot:
 j/room#username#password
 
 Example:
-j/MyRoom#bot1#123456`
+j/myroom#bot1#123456`
         );
-
     }
 
-    // CREATE BOT
-    if (
-        body.startsWith("j/")
-    ) {
+    // ================= CREATE =================
 
+    if (body.startsWith("j/")) {
         createBot(from, body);
-
     }
-
 }
 
-// ========================================
+// =====================================
 // CREATE BOT
-// ========================================
+// =====================================
 
-async function createBot(owner, cmd) {
+async function createBot(owner, command) {
 
     try {
 
-        const data =
-            cmd.substring(2).split("#");
+        const split = command.substring(2).split("#");
 
-        const room = data[0];
-        const user = data[1];
-        const pass = data[2];
+        const room = split[0];
+        const username = split[1];
+        const password = split[2];
 
-        if (
-            !room ||
-            !user ||
-            !pass
-        ) {
-
-            return send(
-                owner,
-                "Invalid Format"
-            );
-
+        if (!room || !username || !password) {
+            return send(owner, "Invalid format.");
         }
 
-        // ================= ACTIVE CHECK =================
-        if (CHILD_BOTS[room]) {
+        let bots = loadJSON("./storage/bots.json", []);
 
-            return send(
-                owner,
-                "Room already has active bot."
-            );
-
-        }
-
-        // ================= SAVE CHECK =================
-        let bots =
-            loadJSON(
-                "./storage/bots.json",
-                []
-            );
-
-        // REMOVE DEAD DUPLICATES
-        bots = bots.filter(
-            x => x.room !== room
+        // remove dead duplicates
+        bots = bots.filter(x =>
+            x &&
+            x.room &&
+            x.username
         );
 
-        const botConfig = {
+        // already active
+        if (CHILD_BOTS[room]) {
+            return send(owner, "Room already has active bot.");
+        }
 
+        // remove old dead room config
+        bots = bots.filter(x => x.room !== room);
+
+        const config = {
             room,
-            username: user,
-            password: pass,
+            username,
+            password,
             owner,
-
+            roomMasters: [],
             welcome: true,
-            quiz: true,
-            roomMasters: []
-
+            quiz: true
         };
 
-        bots.push(botConfig);
+        send(owner, `Creating bot ${username}...`);
 
-        saveJSON(
-            "./storage/bots.json",
-            bots
-        );
+        const result = await ChildBot.start(config);
 
-        send(
-            owner,
-            `Creating ChildBot ${user}...`
-        );
-
-        // ================= START BOT =================
-        const result =
-            await ChildBot.start(botConfig);
-
-        if (
-            result &&
-            result.success
-        ) {
-
-            CHILD_BOTS[room] = {
-
-                username: user,
-                room
-
-            };
-
-            send(
-                owner,
-
-`✅ ChildBot Created
-
-Bot: ${user}
-Room: ${room}`
-            );
-
-            console.log(
-                "[BOT ONLINE]",
-                room
-            );
-
-        } else {
-
-            send(
-                owner,
-                "❌ ChildBot Failed"
-            );
-
+        if (!result.success) {
+            return send(owner, "Bot failed login/join.");
         }
+
+        CHILD_BOTS[room] = result.bot;
+
+        bots.push(config);
+
+        saveJSON("./storage/bots.json", bots);
+
+        send(owner,
+`BOT SUCCESSFULLY CREATED
+
+Room: ${room}
+Bot: ${username}`
+        );
 
     } catch(err) {
 
-        console.log(
-            "[CREATE BOT ERROR]",
-            err
-        );
+        console.log("[CREATE ERROR]", err);
 
+        send(owner, "Bot crashed.");
     }
-
 }
 
-// ========================================
-// LOAD SAVED BOTS
-// ========================================
+// =====================================
+// LOAD SAVED
+// =====================================
 
 async function loadSavedBots() {
 
-    try {
+    const bots = loadJSON("./storage/bots.json", []);
 
-        const bots =
-            loadJSON(
-                "./storage/bots.json",
-                []
-            );
+    console.log("[LOADING SAVED BOTS]", bots.length);
 
-        console.log(
-            "[AUTO LOAD BOTS]",
-            bots.length
-        );
+    for (const bot of bots) {
 
-        for (const bot of bots) {
+        try {
 
-            try {
+            const result = await ChildBot.start(bot);
 
-                const result =
-                    await ChildBot.start(bot);
+            if (result.success) {
 
-                if (
-                    result &&
-                    result.success
-                ) {
+                CHILD_BOTS[bot.room] = result.bot;
 
-                    CHILD_BOTS[bot.room] = {
-
-                        username: bot.username,
-                        room: bot.room
-
-                    };
-
-                    console.log(
-                        "[AUTO RECONNECTED]",
-                        bot.username
-                    );
-
-                }
-
-            } catch(err) {
-
-                console.log(
-                    "[AUTO LOAD ERROR]",
-                    err
-                );
-
+                console.log("[RECONNECTED]", bot.username);
             }
 
+        } catch(err) {
+
+            console.log("[LOAD BOT ERROR]", err);
         }
-
-    } catch(err) {
-
-        console.log(
-            "[LOAD BOT ERROR]",
-            err
-        );
-
     }
-
 }
 
-// ========================================
+// =====================================
 // SEND PM
-// ========================================
+// =====================================
 
 function send(to, body) {
 
     if (!socket) return;
+    if (socket.readyState !== 1) return;
 
     socket.send(JSON.stringify({
-
         handler: "chat_message",
-
         type: "text",
-
         to,
-
         body,
-
-        id: generateID()
-
+        id: packet()
     }));
-
 }
 
-// ========================================
-
-module.exports = {
-    start
-};
+module.exports = { start };
