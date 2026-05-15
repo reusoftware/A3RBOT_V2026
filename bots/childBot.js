@@ -2,24 +2,35 @@ const WebSocket = require("ws");
 const QuizSystem = require("./quizSystem");
 const { loadJSON } = require("./storage");
 
+const ACTIVE_BOTS = new Map();
+
 function id() {
     return "BOT-" + Date.now();
 }
 
 function start(config) {
 
+    // ❗ PREVENT DUPLICATE INSTANCE
+    if (ACTIVE_BOTS.has(config.username)) {
+        console.log("[BLOCKED DUPLICATE BOT]", config.username);
+        return Promise.resolve({
+            success: false,
+            reason: "duplicate_instance"
+        });
+    }
+
+    ACTIVE_BOTS.set(config.username, true);
+
     return new Promise((resolve) => {
 
         const socket = new WebSocket("wss://chatp.net:5333/server");
 
         let loggedIn = false;
-        let roomReady = false;
+        let joinedRoom = false;
         let quizStarted = false;
-        let joinLocked = false;
 
         console.log("[CHILDBOT START]", config.username);
 
-        // ================== CONNECT ==================
         socket.on("open", () => {
 
             socket.send(JSON.stringify({
@@ -31,7 +42,6 @@ function start(config) {
 
         });
 
-        // ================= MESSAGE =================
         socket.on("message", (data) => {
 
             let msg;
@@ -56,43 +66,48 @@ function start(config) {
                 }
 
                 if (msg.type === "failed") {
-                    return resolve({ success: false });
+
+                    ACTIVE_BOTS.delete(config.username);
+
+                    return resolve({
+                        success: false,
+                        reason: "login_failed"
+                    });
                 }
             }
 
-            // ================= ROOM EVENTS =================
+            // ================= ROOM =================
             if (msg.handler === "room_event") {
 
-                // ONLY FIRST JOIN EVENT
                 if (msg.type === "you_joined") {
 
-                    if (joinLocked) return;
-                    joinLocked = true;
+                    if (joinedRoom) return;
+                    joinedRoom = true;
 
-                    roomReady = true;
+                    console.log("[ROOM JOINED]", config.room);
 
-                    console.log("[ROOM READY]", config.room);
-
-                    // ✅ SEND ONLY ONCE READY MESSAGE
+                    // ✔ ONLY ONE READY MESSAGE
                     socket.send(JSON.stringify({
                         handler: "room_message",
                         type: "text",
                         room: config.room,
-                        body: "🤖 I'm a bot and ready to work!",
+                        body: "🤖 Bot online and ready!",
                         id: id()
                     }));
 
-                    // ✅ START QUIZ ONLY ONCE (DELAYED)
-                    setTimeout(() => {
+                    // ✔ START QUIZ ONCE ONLY
+                    if (!quizStarted) {
 
-                        if (quizStarted) return;
                         quizStarted = true;
 
-                        QuizSystem.startQuiz(socket, config.room);
+                        setTimeout(() => {
 
-                    }, 6000);
+                            QuizSystem.startQuiz(socket, config.room);
 
-                    resolve({
+                        }, 5000);
+                    }
+
+                    return resolve({
                         success: true,
                         socket,
                         room: config.room,
@@ -100,38 +115,25 @@ function start(config) {
                     });
                 }
 
-                // ignore events until stable
-                if (!roomReady) return;
-
                 handleRoom(socket, config, msg);
             }
         });
 
-        // ================= CLOSE =================
         socket.on("close", () => {
 
             console.log("[CHILDBOT CLOSED]", config.username);
 
-            // ❌ IMPORTANT: remove auto spam reconnect (this causes flooding)
-            // REMOVE auto restart for now
+            ACTIVE_BOTS.delete(config.username);
 
         });
 
         socket.on("error", (e) => {
+
             console.log("[CHILDBOT ERROR]", e.message);
+
+            ACTIVE_BOTS.delete(config.username);
+
         });
-
-        // ================= KEEP ALIVE =================
-        setInterval(() => {
-
-            if (socket.readyState === 1) {
-                socket.send(JSON.stringify({
-                    handler: "ping",
-                    id: id()
-                }));
-            }
-
-        }, 25000);
 
     });
 }
@@ -166,10 +168,10 @@ function handleRoom(socket, config, msg) {
             handler: "room_message",
             type: "text",
             room: config.room,
-            body: u ? `${from} score: ${u.score}` : "No score",
+            body: u ? `${from} score: ${u.score}` : "No score yet",
             id: id()
         }));
     }
 }
 
-module.exports = { start };
+module.exports = { start, ACTIVE_BOTS };
