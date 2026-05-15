@@ -13,10 +13,11 @@ function start(config) {
         const socket = new WebSocket("wss://chatp.net:5333/server");
 
         let ready = false;
-        let loggedIn = false;
+        let logged = false;
 
         console.log("[CHILDBOT START]", config.username);
 
+        // ================= CONNECT =================
         socket.on("open", () => {
 
             socket.send(JSON.stringify({
@@ -28,6 +29,7 @@ function start(config) {
 
         });
 
+        // ================= MESSAGE =================
         socket.on("message", (data) => {
 
             let msg;
@@ -41,7 +43,8 @@ function start(config) {
             if (msg.handler === "login_event") {
 
                 if (msg.type === "success") {
-                    loggedIn = true;
+
+                    logged = true;
 
                     socket.send(JSON.stringify({
                         handler: "room_join",
@@ -51,42 +54,50 @@ function start(config) {
                 }
 
                 if (msg.type === "failed") {
-                    return resolve({
-                        success: false,
-                        stage: "login_failed"
-                    });
+                    return resolve({ success: false });
                 }
             }
 
-            // ================= ROOM JOIN =================
+            // ================= ROOM READY =================
             if (msg.handler === "room_event") {
 
-                if (
-                    msg.type === "room_joined" ||
-                    msg.type === "joined" ||
-                    msg.type === "user_joined"
+                if (!ready &&
+                    (msg.type === "you_joined" ||
+                     msg.type === "user_joined")
                 ) {
 
-                    if (!ready) {
-                        ready = true;
+                    ready = true;
 
-                        console.log("[ROOM READY]", config.room);
+                    console.log("[ROOM READY]", config.room);
 
-                        QuizSystem.startQuiz(socket, config.room);
+                    QuizSystem.startQuiz(socket, config.room);
 
-                        resolve({
-                            success: true,
-                            stage: "ready"
-                        });
-                    }
+                    resolve({
+                        success: true,
+                        stage: "ready"
+                    });
                 }
 
                 handleRoom(socket, config, msg);
             }
         });
 
+        // ================= KEEP ALIVE FIX =================
+        const ping = setInterval(() => {
+            if (socket.readyState === 1) {
+                socket.send(JSON.stringify({
+                    handler: "ping",
+                    id: generatePacketID()
+                }));
+            }
+        }, 20000);
+
         socket.on("close", () => {
+            clearInterval(ping);
             console.log("[CHILDBOT CLOSED]", config.username);
+
+            // OPTIONAL AUTO RECONNECT
+            setTimeout(() => start(config), 5000);
         });
 
         socket.on("error", (e) => {
@@ -99,49 +110,48 @@ function start(config) {
 // ================= ROOM HANDLER =================
 function handleRoom(socket, config, msg) {
 
-    if (!msg.type) return;
+    if (msg.type !== "text") return;
+    if (!msg.body) return;
 
-    if (msg.type === "text") {
+    const body = msg.body.trim().toLowerCase();
+    const from = msg.from;
 
-        const body = (msg.body || "").toLowerCase().trim();
-        const from = msg.from;
+    // quiz answer
+    QuizSystem.handleAnswer(socket, config.room, from, body);
 
-        QuizSystem.handleAnswer(socket, config.room, from, body);
-
-        // ===== COMMANDS =====
-        if (body === "help") {
-
-            socket.send(JSON.stringify({
-                handler: "room_message",
-                type: "text",
-                room: config.room,
-                body:
-`BOT COMMANDS:
+    // ================= HELP =================
+    if (body === "help") {
+        send(socket, config.room,
+`HELP:
 help
 myscore
 @quiz on/off
-@welcome on/off`,
-                id: generatePacketID()
-            }));
-        }
-
-        if (body === "myscore") {
-
-            const scores = loadJSON("./storage/scores.json", {});
-
-            const user = scores[from];
-
-            socket.send(JSON.stringify({
-                handler: "room_message",
-                type: "text",
-                room: config.room,
-                body: user
-                    ? `${from} score: ${user.score}`
-                    : `${from} no score yet`,
-                id: generatePacketID()
-            }));
-        }
+@welcome on/off`);
     }
+
+    // ================= SCORE =================
+    if (body === "myscore") {
+
+        const scores = loadJSON("./storage/scores.json", {});
+        const user = scores[from];
+
+        send(socket, config.room,
+            user
+            ? `${from} score: ${user.score}`
+            : `${from} no score yet`
+        );
+    }
+}
+
+// ================= SEND =================
+function send(socket, room, body) {
+    socket.send(JSON.stringify({
+        handler: "room_message",
+        type: "text",
+        room,
+        body,
+        id: generatePacketID()
+    }));
 }
 
 module.exports = { start };
