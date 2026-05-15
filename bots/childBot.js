@@ -62,9 +62,7 @@ function start(config) {
             if (msg.handler === "room_event") {
 
                 const isJoin =
-                    msg.type === "you_joined" ||
-                    msg.type === "room_joined" ||
-                    msg.type === "joined";
+                    msg.type === "you_joined";
 
                 if (isJoin && !ready) {
 
