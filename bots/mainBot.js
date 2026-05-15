@@ -30,7 +30,24 @@ function start(username, password) {
             try {
                 msg = JSON.parse(data);
             } catch { return; }
+if (msg.handler === "bot_status" && msg.type === "child_ready") {
 
+    console.log("[CHILDBOT READY]", msg.username);
+
+    sendStatus(
+        `ChildBot ONLINE: ${msg.username} in ${msg.room}`,
+        "success"
+    );
+
+    CHILD_BOTS.push(msg.username);
+
+    sendPrivate(
+        msg.owner || "SYSTEM",
+        `ChildBot SUCCESSFULLY CREATED:
+User: ${msg.username}
+Room: ${msg.room}`
+    );
+}
             if (msg.handler === "login_event") {
 
                 if (msg.type === "success") {
