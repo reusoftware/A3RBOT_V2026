@@ -2,100 +2,77 @@ const WebSocket = require("ws");
 const QuizSystem = require("./quizSystem");
 const { loadJSON, saveJSON } = require("./storage");
 
-function generateID() {
-    return "BOT-" + Date.now();
+function packet() {
+    return "BOT-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
 
 function start(config) {
 
     return new Promise((resolve) => {
 
-        const socket =
-            new WebSocket(
-                "wss://chatp.net:5333/server"
-            );
-
         let joined = false;
 
-        // ================= CONNECT =================
+        const socket = new WebSocket(
+            "wss://chatp.net:5333/server"
+        );
+
+        console.log("[BOT START]", config.username);
+
+        // ================= OPEN =================
+
         socket.on("open", () => {
 
-            console.log(
-                "[BOT CONNECTED]",
-                config.username
-            );
-
             socket.send(JSON.stringify({
-
                 handler: "login",
-
                 username: config.username,
-
                 password: config.password,
-
-                id: generateID()
-
+                id: packet()
             }));
-
         });
 
         // ================= MESSAGE =================
-        socket.on("message", async(data) => {
+
+        socket.on("message", (data) => {
 
             let msg;
 
             try {
-
-                msg = JSON.parse(data);
-
+                msg = JSON.parse(data.toString());
             } catch {
-
                 return;
-
             }
-
-            console.log(
-                "[BOT RAW]",
-                msg
-            );
 
             // ================= LOGIN =================
+
             if (
-                msg.handler === "login_event"
+                msg.handler === "login_event" &&
+                msg.type === "success"
             ) {
 
-                if (
-                    msg.type === "success"
-                ) {
+                console.log("[LOGIN OK]", config.username);
 
-                    socket.send(JSON.stringify({
-
-                        handler: "room_join",
-
-                        name: config.room,
-
-                        id: generateID()
-
-                    }));
-
-                }
-
-                if (
-                    msg.type === "failed"
-                ) {
-
-                    resolve({
-                        success: false
-                    });
-
-                }
-
+                socket.send(JSON.stringify({
+                    handler: "room_join",
+                    name: config.room,
+                    id: packet()
+                }));
             }
 
-            // ================= ROOM =================
+            // ================= LOGIN FAILED =================
+
             if (
-                msg.handler === "room_event"
+                msg.handler === "login_event" &&
+                msg.type === "failed"
             ) {
+
+                return resolve({
+                    success: false
+                });
+            }
+
+            // ================= ROOM EVENTS =================
+
+            if (msg.handler === "room_event") {
 
                 // ROOM READY
                 if (
@@ -105,21 +82,16 @@ function start(config) {
 
                     joined = true;
 
-                    console.log(
-                        "[ROOM JOINED]",
-                        config.room
-                    );
+                    console.log("[ROOM READY]", config.room);
 
-                    sendRoomMessage(
+                    sendRoom(
                         socket,
                         config.room,
-                        "🤖 Bot Ready!"
+                        "🤖 Bot Online"
                     );
 
-                    // START QUIZ
-                    if (
-                        config.quiz !== false
-                    ) {
+                    // start quiz AFTER room ready
+                    if (config.quiz !== false) {
 
                         setTimeout(() => {
 
@@ -128,139 +100,110 @@ function start(config) {
                                 config.room
                             );
 
-                        }, 3000);
-
+                        }, 5000);
                     }
 
                     resolve({
-                        success: true
+                        success: true,
+                        bot: {
+                            socket,
+                            config
+                        }
                     });
 
+                    return;
                 }
 
-                handleRoom(
-                    socket,
-                    config,
-                    msg
-                );
+                // user joined
+                if (
+                    msg.type === "user_joined" &&
+                    config.welcome
+                ) {
 
+                    sendRoom(
+                        socket,
+                        config.room,
+                        `Welcome ${msg.username}`
+                    );
+                }
+
+                // text
+                if (msg.type === "text") {
+
+                    handleCommands(
+                        socket,
+                        config,
+                        msg
+                    );
+                }
             }
+        });
 
+        // ================= CLOSE =================
+
+        socket.on("close", () => {
+
+            console.log("[BOT CLOSED]", config.username);
+
+            setTimeout(() => {
+                start(config);
+            }, 5000);
+        });
+
+        // ================= ERROR =================
+
+        socket.on("error", (e) => {
+            console.log("[BOT ERROR]", e.message);
         });
 
         // ================= KEEP ALIVE =================
+
         setInterval(() => {
 
-            if (
-                socket.readyState === 1
-            ) {
+            if (socket.readyState === 1) {
 
                 socket.send(JSON.stringify({
-
                     handler: "ping",
-
-                    id: generateID()
-
+                    id: packet()
                 }));
-
             }
 
         }, 20000);
 
-        // ================= CLOSE =================
-        socket.on("close", () => {
-
-            console.log(
-                "[BOT CLOSED]",
-                config.username
-            );
-
-        });
-
-        // ================= ERROR =================
-        socket.on("error", (err) => {
-
-            console.log(
-                "[BOT ERROR]",
-                err.message
-            );
-
-        });
-
     });
-
 }
 
-// ========================================
-// ROOM HANDLER
-// ========================================
+// =====================================
+// COMMANDS
+// =====================================
 
-function handleRoom(
-    socket,
-    config,
-    msg
-) {
+function handleCommands(socket, config, msg) {
 
-    const type = msg.type;
+    const body = (msg.body || "")
+        .trim()
+        .toLowerCase();
 
-    // ================= WELCOME =================
-    if (
-        type === "user_joined" &&
-        config.welcome !== false
-    ) {
+    const from = msg.from;
 
-        sendRoomMessage(
+    if (!body) return;
+
+    // quiz answers
+    if (config.quiz !== false) {
+        QuizSystem.handleAnswer(
             socket,
             config.room,
-            `Welcome ${msg.username}`
-        );
-
-    }
-
-    // ================= MESSAGE =================
-    if (
-        type === "text" ||
-        type === "message" ||
-        type === "chat"
-    ) {
-
-        const body =
-            (msg.body || "")
-            .toLowerCase()
-            .trim();
-
-        const from =
-            msg.from;
-
-        if (!body) return;
-
-        console.log(
-            "[ROOM CMD]",
+            from,
             body
         );
+    }
 
-        // QUIZ
-        if (
-            config.quiz !== false
-        ) {
+    // ================= HELP =================
 
-            QuizSystem.handleAnswer(
-                socket,
-                config.room,
-                from,
-                body
-            );
+    if (body === "help") {
 
-        }
-
-        // HELP
-        if (
-            body === "help"
-        ) {
-
-            return sendRoomMessage(
-                socket,
-                config.room,
+        return sendRoom(
+            socket,
+            config.room,
 
 `BOT COMMANDS
 
@@ -269,121 +212,142 @@ myscore
 +quiz
 -quiz
 +wc
--wc`
-            );
-
-        }
-
-        // QUIZ ON
-        if (body === "+quiz") {
-
-            config.quiz = true;
-
-            QuizSystem.startQuiz(
-                socket,
-                config.room
-            );
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-                "Quiz Enabled"
-            );
-
-        }
-
-        // QUIZ OFF
-        if (body === "-quiz") {
-
-            config.quiz = false;
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-                "Quiz Disabled"
-            );
-
-        }
-
-        // WELCOME ON
-        if (body === "+wc") {
-
-            config.welcome = true;
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-                "Welcome Enabled"
-            );
-
-        }
-
-        // WELCOME OFF
-        if (body === "-wc") {
-
-            config.welcome = false;
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-                "Welcome Disabled"
-            );
-
-        }
-
-        // SCORE
-        if (
-            body === "myscore"
-        ) {
-
-            const scores =
-                loadJSON(
-                    "./storage/scores.json",
-                    {}
-                );
-
-            const s =
-                scores[from];
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-
-                s
-                ? `${from} Score: ${s.score}`
-                : "No score yet"
-            );
-
-        }
-
+-wc
+maslist
+mas+username
+mas-number`
+        );
     }
 
+    // ================= QUIZ =================
+
+    if (body === "+quiz") {
+
+        config.quiz = true;
+
+        saveBot(config);
+
+        QuizSystem.startQuiz(
+            socket,
+            config.room
+        );
+
+        return sendRoom(
+            socket,
+            config.room,
+            "Quiz enabled"
+        );
+    }
+
+    if (body === "-quiz") {
+
+        config.quiz = false;
+
+        saveBot(config);
+
+        return sendRoom(
+            socket,
+            config.room,
+            "Quiz disabled"
+        );
+    }
+
+    // ================= WELCOME =================
+
+    if (body === "+wc") {
+
+        config.welcome = true;
+
+        saveBot(config);
+
+        return sendRoom(
+            socket,
+            config.room,
+            "Welcome enabled"
+        );
+    }
+
+    if (body === "-wc") {
+
+        config.welcome = false;
+
+        saveBot(config);
+
+        return sendRoom(
+            socket,
+            config.room,
+            "Welcome disabled"
+        );
+    }
+
+    // ================= SCORE =================
+
+    if (body === "myscore") {
+
+        const scores = loadJSON(
+            "./storage/scores.json",
+            {}
+        );
+
+        const s = scores[from];
+
+        if (!s) {
+
+            return sendRoom(
+                socket,
+                config.room,
+                "No score yet."
+            );
+        }
+
+        return sendRoom(
+            socket,
+            config.room,
+
+`${from}
+
+Score: ${s.score}`
+        );
+    }
 }
 
-// ========================================
+// =====================================
 
-function sendRoomMessage(
-    socket,
-    room,
-    body
-) {
+function sendRoom(socket, room, body) {
+
+    if (socket.readyState !== 1) return;
 
     socket.send(JSON.stringify({
-
         handler: "room_message",
-
         type: "text",
-
         room,
-
         body,
-
-        id: generateID()
-
+        id: packet()
     }));
-
 }
 
-module.exports = {
-    start
-};
+// =====================================
+
+function saveBot(config) {
+
+    let bots = loadJSON(
+        "./storage/bots.json",
+        []
+    );
+
+    const index = bots.findIndex(
+        x => x.room === config.room
+    );
+
+    if (index !== -1) {
+
+        bots[index] = config;
+
+        saveJSON(
+            "./storage/bots.json",
+            bots
+        );
+    }
+}
+
+module.exports = { start };
