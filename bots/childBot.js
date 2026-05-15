@@ -67,16 +67,12 @@ function start(config) {
                 if (isJoin && !ready) {
 
                     ready = true;
-
+                      // 🔥 SEND BACK CONFIRMATION (IMPORTANT FIX)                 
+ send(socket, config.room,
+`Im a Robot,Ready to Work.`);
                     console.log("[ROOM READY]", config.room);
 
-                    // 🔥 SEND BACK CONFIRMATION (IMPORTANT FIX)
-                    socket.send(JSON.stringify({
-                        handler: "bot_status",
-                        type: "child_ready",
-                        room: config.room,
-                        username: config.username
-                    }));
+                  
 
                     // start quiz AFTER stable join
                     setTimeout(() => {
