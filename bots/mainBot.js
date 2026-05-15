@@ -6,60 +6,105 @@ const {
     saveJSON
 } = require("./storage");
 
-let socket;
+let socket = null;
+
 let CHILD_BOTS = [];
 
-// =========================
+// ========================================
 // PACKET ID
-// =========================
+// ========================================
+
 function generatePacketID() {
+
     return "BOT-" + Date.now();
+
 }
 
-// =========================
-// STATUS SENDER (UI SAFE)
-// =========================
+// ========================================
+// SEND STATUS TO WEB UI
+// ========================================
+
 function sendStatus(message, type = "info") {
 
     console.log("[STATUS]", message);
 
     const payload = {
+
         type: "bot_status",
+
         message,
+
         statusType: type,
+
         count: CHILD_BOTS.length
+
     };
 
-    if (global.uiSocket && global.uiSocket.readyState === 1) {
-        global.uiSocket.send(JSON.stringify(payload));
+    try {
+
+        if (
+            global.uiSocket &&
+            global.uiSocket.readyState === 1
+        ) {
+
+            global.uiSocket.send(
+                JSON.stringify(payload)
+            );
+
+        }
+
+    } catch(err) {
+
+        console.log(
+            "UI SOCKET ERROR:",
+            err
+        );
+
     }
+
 }
 
-// =========================
+// ========================================
 // START MAIN BOT
-// =========================
+// ========================================
+
 async function start(username, password) {
 
     return new Promise((resolve) => {
 
         try {
 
-            socket = new WebSocket("wss://chatp.net:5333/server");
+            socket = new WebSocket(
+                "wss://chatp.net:5333/server"
+            );
 
             let finished = false;
 
             // =========================
             // CONNECT
             // =========================
+
             socket.on("open", () => {
 
-                console.log("Main Bot Connected");
+                console.log(
+                    "MAIN BOT CONNECTED"
+                );
+
+                sendStatus(
+                    "Main Bot Connected",
+                    "success"
+                );
 
                 socket.send(JSON.stringify({
+
                     handler: "login",
-                    username,
-                    password,
+
+                    username: username,
+
+                    password: password,
+
                     id: generatePacketID()
+
                 }));
 
             });
@@ -67,242 +112,538 @@ async function start(username, password) {
             // =========================
             // MESSAGE
             // =========================
-            socket.on("message", async (data) => {
+
+            socket.on("message", async(data) => {
 
                 try {
 
-                    const msg = JSON.parse(data);
+                    // IMPORTANT FIX
+                    const text =
+                        data.toString();
 
+                    console.log(
+                        "[MAINBOT RAW]",
+                        text
+                    );
+
+                    const msg =
+                        JSON.parse(text);
+
+                    // =====================
                     // LOGIN SUCCESS
+                    // =====================
+
                     if (
                         msg.handler === "login_event" &&
                         msg.type === "success"
                     ) {
 
-                        sendStatus("Main bot logged in", "success");
+                        console.log(
+                            "MAINBOT LOGIN SUCCESS"
+                        );
+
+                        sendStatus(
+                            "Main Bot Logged In",
+                            "success"
+                        );
 
                         if (!finished) {
+
                             finished = true;
+
                             resolve({
                                 success: true,
                                 message: "Login Success"
                             });
+
                         }
+
                     }
 
+                    // =====================
                     // LOGIN FAILED
+                    // =====================
+
                     if (
                         msg.handler === "login_event" &&
-                        (msg.type === "failed" || msg.type === "error")
+                        (
+                            msg.type === "failed" ||
+                            msg.type === "error"
+                        )
                     ) {
 
-                        sendStatus("Main bot login failed", "error");
+                        console.log(
+                            "MAINBOT LOGIN FAILED"
+                        );
+
+                        sendStatus(
+                            "Main Bot Login Failed",
+                            "error"
+                        );
 
                         if (!finished) {
+
                             finished = true;
+
                             resolve({
                                 success: false,
                                 message: "Wrong Credentials"
                             });
+
                         }
+
                     }
 
+                    // =====================
                     // PRIVATE MESSAGE
-                    if (msg.handler === "chat_message") {
-                        handlePrivateMessage(msg);
+                    // =====================
+
+                    if (
+                        msg.handler === "chat_message"
+                    ) {
+
+                        await handlePrivateMessage(msg);
+
                     }
 
-                } catch (err) {
-                    console.log("MAINBOT PARSE ERROR:", err);
+                } catch(err) {
+
+                    console.log(
+                        "MAINBOT MESSAGE ERROR:",
+                        err
+                    );
+
                 }
 
             });
 
+            // =========================
+            // ERROR
+            // =========================
+
             socket.on("error", (err) => {
-                console.log("MAINBOT ERROR:", err);
+
+                console.log(
+                    "MAINBOT SOCKET ERROR:",
+                    err
+                );
+
+                sendStatus(
+                    "MainBot Socket Error",
+                    "error"
+                );
 
                 if (!finished) {
+
                     finished = true;
+
                     resolve({
                         success: false,
                         message: "Socket Error"
                     });
+
                 }
+
             });
+
+            // =========================
+            // CLOSE
+            // =========================
 
             socket.on("close", () => {
-                console.log("MAINBOT CLOSED");
+
+                console.log(
+                    "MAINBOT CLOSED"
+                );
+
+                sendStatus(
+                    "MainBot Closed",
+                    "error"
+                );
+
             });
 
+            // =========================
             // TIMEOUT
+            // =========================
+
             setTimeout(() => {
+
                 if (!finished) {
+
                     finished = true;
+
+                    sendStatus(
+                        "Login Timeout",
+                        "error"
+                    );
+
                     resolve({
                         success: false,
                         message: "Login Timeout"
                     });
+
                 }
+
             }, 15000);
 
-            // LOAD SAVED BOTS AFTER CONNECT
+            // =========================
+            // LOAD SAVED BOTS
+            // =========================
+
             loadSavedBots();
 
-        } catch (err) {
-            console.log("MAINBOT CRASH:", err);
+        } catch(err) {
+
+            console.log(
+                "MAINBOT CRASH:",
+                err
+            );
 
             resolve({
                 success: false,
                 message: "Server Error"
             });
+
         }
 
     });
+
 }
 
-// =========================
-// PRIVATE MESSAGE HANDLER
-// =========================
+// ========================================
+// HANDLE PRIVATE MESSAGE
+// ========================================
+
 async function handlePrivateMessage(msg) {
 
-    if (!msg.body) return;
+    try {
 
-    const from = msg.from;
-    const body = msg.body.trim();
+        if (!msg.body) return;
 
-    console.log("PM:", body);
+        const from =
+            msg.from;
 
-    // HELP
-    if (body.toLowerCase() === "help") {
+        const body =
+            msg.body.trim();
 
-        return sendPrivate(from,
-`SERVER BOT GUIDE
+        console.log(
+            "[PRIVATE]",
+            from,
+            body
+        );
+
+        // =====================
+        // HELP
+        // =====================
+
+        if (
+            body.toLowerCase() === "help"
+        ) {
+
+            sendPrivate(
+                from,
+
+`SERVER FUN BOT GUIDE
 
 Request ChildBot:
 j/room#username#password
 
 Example:
 j/MyRoom#child1#pass123`
+            );
+
+        }
+
+        // =====================
+        // CREATE CHILDBOT
+        // =====================
+
+        if (
+            body.startsWith("j/")
+        ) {
+
+            await createChildBot(
+                from,
+                body
+            );
+
+        }
+
+    } catch(err) {
+
+        console.log(
+            "PRIVATE MESSAGE ERROR:",
+            err
         );
+
     }
 
-    // CREATE CHILD BOT
-    if (body.startsWith("j/")) {
-        return createChildBot(from, body);
-    }
 }
 
-// =========================
-// CREATE CHILD BOT
-// =========================
+// ========================================
+// CREATE CHILDBOT
+// ========================================
+
 async function createChildBot(owner, command) {
-
-    const data = command.substring(2).split("#");
-
-    const room = data[0];
-    const username = data[1];
-    const password = data[2];
-
-    if (!room || !username || !password) {
-        return sendPrivate(owner, "Invalid format.");
-    }
-
-    let bots = loadJSON("./storage/bots.json", []);
-
-    if (bots.find(x => x.room === room)) {
-        return sendPrivate(owner, "Room already has bot.");
-    }
-
-    const botConfig = {
-        room,
-        username,
-        password,
-        owner,
-        welcome: true,
-        quiz: true
-    };
-
-    bots.push(botConfig);
-    saveJSON("./storage/bots.json", bots);
-
-    sendStatus(`Creating ChildBot: ${username}`, "info");
 
     try {
 
-        const result = await ChildBot.start(botConfig);
+        const data =
+            command
+            .substring(2)
+            .split("#");
 
-        // TRACK BOT
+        const room =
+            data[0];
+
+        const username =
+            data[1];
+
+        const password =
+            data[2];
+
+        if (
+            !room ||
+            !username ||
+            !password
+        ) {
+
+            sendPrivate(
+                owner,
+                "Invalid Format"
+            );
+
+            return;
+
+        }
+
+        let bots =
+            loadJSON(
+                "./storage/bots.json",
+                []
+            );
+
+        const exists =
+            bots.find(
+                x => x.room === room
+            );
+
+        if (exists) {
+
+            sendPrivate(
+                owner,
+                "Room already has bot."
+            );
+
+            return;
+
+        }
+
+        const botConfig = {
+
+            room,
+            username,
+            password,
+            owner,
+
+            welcome: true,
+
+            quiz: true
+
+        };
+
+        bots.push(botConfig);
+
+        saveJSON(
+            "./storage/bots.json",
+            bots
+        );
+
+        sendStatus(
+            `Creating ChildBot: ${username}`,
+            "info"
+        );
+
+        sendPrivate(
+            owner,
+            `Creating ChildBot: ${username}`
+        );
+
+        // =====================
+        // START BOT
+        // =====================
+
+        const result =
+            await ChildBot.start(botConfig);
+
         if (result.success) {
+
             CHILD_BOTS.push(username);
+
         }
 
         sendStatus(
-            `ChildBot ${username} => ${result.success ? "CONNECTED" : "FAILED"}`,
-            result.success ? "success" : "error"
+
+            `ChildBot ${username} => ${
+                result.success
+                    ? "CONNECTED"
+                    : "FAILED"
+            }`,
+
+            result.success
+                ? "success"
+                : "error"
+
         );
 
-        sendPrivate(owner,
-`ChildBot Result:
+        sendPrivate(
+
+            owner,
+
+`ChildBot Result
+
 User: ${username}
 Room: ${room}
-Status: ${result.success ? "CONNECTED" : "FAILED"}`
+
+Status:
+${
+    result.success
+        ? "CONNECTED"
+        : "FAILED"
+}`
+
         );
 
-    } catch (err) {
+    } catch(err) {
 
-        sendStatus(`ChildBot ERROR: ${username}`, "error");
+        console.log(
+            "CREATE BOT ERROR:",
+            err
+        );
 
-        sendPrivate(owner, "ChildBot crashed.");
+        sendStatus(
+            "ChildBot crashed",
+            "error"
+        );
+
     }
+
 }
 
-// =========================
+// ========================================
 // LOAD SAVED BOTS
-// =========================
+// ========================================
+
 function loadSavedBots() {
 
-    const bots = loadJSON("./storage/bots.json", []);
+    try {
 
-    bots.forEach(bot => {
+        const bots =
+            loadJSON(
+                "./storage/bots.json",
+                []
+            );
 
-        console.log("LOADING BOT:", bot.username);
+        bots.forEach(async(bot) => {
 
-        ChildBot.start(bot)
-            .then(res => {
+            console.log(
+                "LOADING BOT:",
+                bot.username
+            );
 
-                if (res.success) {
-                    CHILD_BOTS.push(bot.username);
+            try {
+
+                const result =
+                    await ChildBot.start(bot);
+
+                if (result.success) {
+
+                    CHILD_BOTS.push(
+                        bot.username
+                    );
+
                 }
 
                 sendStatus(
-                    `Loaded bot ${bot.username}: ${res.success}`,
-                    res.success ? "success" : "error"
+
+                    `Loaded Bot ${
+                        bot.username
+                    } => ${
+                        result.success
+                            ? "CONNECTED"
+                            : "FAILED"
+                    }`,
+
+                    result.success
+                        ? "success"
+                        : "error"
+
                 );
 
-            })
-            .catch(err => {
-                console.log("LOAD BOT ERROR:", err);
-            });
+            } catch(err) {
 
-    });
+                console.log(
+                    "LOAD BOT ERROR:",
+                    err
+                );
+
+            }
+
+        });
+
+    } catch(err) {
+
+        console.log(
+            "LOAD SAVED BOT ERROR:",
+            err
+        );
+
+    }
+
 }
 
-// =========================
-// SEND PRIVATE MESSAGE
-// =========================
+// ========================================
+// SEND PRIVATE
+// ========================================
+
 function sendPrivate(to, body) {
 
-    if (!socket) return;
+    try {
 
-    socket.send(JSON.stringify({
-        handler: "chat_message",
-        type: "text",
-        to,
-        body,
-        url: "",
-        length: "0",
-        id: generatePacketID()
-    }));
+        if (!socket) return;
+
+        socket.send(JSON.stringify({
+
+            handler: "chat_message",
+
+            type: "text",
+
+            to,
+
+            body,
+
+            url: "",
+
+            length: "0",
+
+            id: generatePacketID()
+
+        }));
+
+    } catch(err) {
+
+        console.log(
+            "SEND PRIVATE ERROR:",
+            err
+        );
+
+    }
+
 }
 
-module.exports = { start };
+// ========================================
+
+module.exports = {
+    start
+};
