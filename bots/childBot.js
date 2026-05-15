@@ -12,12 +12,12 @@ function start(config) {
 
         const socket = new WebSocket("wss://chatp.net:5333/server");
 
-        let ready = false;
-        let logged = false;
+        let loggedIn = false;
+        let roomReady = false;
 
         console.log("[CHILDBOT START]", config.username);
 
-        // ================= CONNECT =================
+        // ================= CONNECTION =================
         socket.on("open", () => {
 
             socket.send(JSON.stringify({
@@ -43,8 +43,7 @@ function start(config) {
             if (msg.handler === "login_event") {
 
                 if (msg.type === "success") {
-
-                    logged = true;
+                    loggedIn = true;
 
                     socket.send(JSON.stringify({
                         handler: "room_join",
@@ -58,32 +57,48 @@ function start(config) {
                 }
             }
 
-            // ================= ROOM READY =================
+            // ================= ROOM EVENT =================
             if (msg.handler === "room_event") {
 
-                if (!ready &&
-                    (msg.type === "you_joined" ||
-                     msg.type === "user_joined")
-                ) {
+                // 🔴 ONLY TRUST TEXT EVENTS AFTER READY
+                if (!roomReady) {
 
-                    ready = true;
+                    if (msg.type === "you_joined") {
 
-                    console.log("[ROOM READY]", config.room);
+                        roomReady = true;
 
-                    QuizSystem.startQuiz(socket, config.room);
+                        console.log("[ROOM READY]", config.room);
 
-                    resolve({
-                        success: true,
-                        stage: "ready"
-                    });
+                        // ⚠️ START QUIZ ONLY ONCE ROOM IS READY
+                        setTimeout(() => {
+                            QuizSystem.startQuiz(socket, config.room);
+                        }, 2000);
+
+                        resolve({ success: true });
+                    }
+
+                    return;
                 }
 
                 handleRoom(socket, config, msg);
             }
         });
 
-        // ================= KEEP ALIVE FIX =================
-        const ping = setInterval(() => {
+        socket.on("close", () => {
+            console.log("[CHILDBOT CLOSED]", config.username);
+
+            // 🔥 AUTO RECONNECT FIX
+            setTimeout(() => {
+                start(config);
+            }, 5000);
+        });
+
+        socket.on("error", (e) => {
+            console.log("[CHILDBOT ERROR]", e.message);
+        });
+
+        // 🔥 KEEP ALIVE (VERY IMPORTANT)
+        setInterval(() => {
             if (socket.readyState === 1) {
                 socket.send(JSON.stringify({
                     handler: "ping",
@@ -91,18 +106,6 @@ function start(config) {
                 }));
             }
         }, 20000);
-
-        socket.on("close", () => {
-            clearInterval(ping);
-            console.log("[CHILDBOT CLOSED]", config.username);
-
-            // OPTIONAL AUTO RECONNECT
-            setTimeout(() => start(config), 5000);
-        });
-
-        socket.on("error", (e) => {
-            console.log("[CHILDBOT ERROR]", e.message);
-        });
 
     });
 }
@@ -116,20 +119,21 @@ function handleRoom(socket, config, msg) {
     const body = msg.body.trim().toLowerCase();
     const from = msg.from;
 
-    // quiz answer
+    // QUIZ
     QuizSystem.handleAnswer(socket, config.room, from, body);
 
     // ================= HELP =================
     if (body === "help") {
+
         send(socket, config.room,
-`HELP:
+`BOT COMMANDS:
 help
 myscore
 @quiz on/off
 @welcome on/off`);
     }
 
-    // ================= SCORE =================
+    // ================= MYSCORE =================
     if (body === "myscore") {
 
         const scores = loadJSON("./storage/scores.json", {});
@@ -137,14 +141,15 @@ myscore
 
         send(socket, config.room,
             user
-            ? `${from} score: ${user.score}`
-            : `${from} no score yet`
+                ? `${from} score: ${user.score}`
+                : `${from} no score yet`
         );
     }
 }
 
 // ================= SEND =================
 function send(socket, room, body) {
+
     socket.send(JSON.stringify({
         handler: "room_message",
         type: "text",
