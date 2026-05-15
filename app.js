@@ -1,32 +1,105 @@
 const express = require("express");
+const http = require("http");
+const path = require("path");
+const WebSocket = require("ws");
 
 const MainBot = require("./bots/mainBot");
 
 const app = express();
 
-app.use(express.static("public"));
+const server = http.createServer(app);
+
+const wss = new WebSocket.Server({
+    server
+});
+
+// =========================
+// GLOBAL UI SOCKET
+// =========================
+
+global.uiSocket = null;
+
+// =========================
+// MIDDLEWARE
+// =========================
+
 app.use(express.json());
 
-app.post("/startbot", async(req, res) => {
+app.use(express.static(
+    path.join(__dirname, "public")
+));
 
-    const username = req.body.username;
-    const password = req.body.password;
+// =========================
+// WEBSOCKET FOR LIVE LOGS
+// =========================
 
-    const result = await MainBot.start(
-        username,
-        password
-    );
+wss.on("connection", (ws) => {
 
-    res.json(result);
+    console.log("WEB UI CONNECTED");
+
+    global.uiSocket = ws;
+
+    ws.on("close", () => {
+
+        console.log("WEB UI CLOSED");
+
+        global.uiSocket = null;
+
+    });
 
 });
 
-const PORT = process.env.PORT || 3000;
+// =========================
+// START MAINBOT
+// =========================
 
-app.listen(PORT, () => {
+app.post("/startbot", async(req, res) => {
+
+    try {
+
+        const {
+            username,
+            password
+        } = req.body;
+
+        console.log(
+            "START BOT REQUEST:",
+            username
+        );
+
+        const result =
+            await MainBot.start(
+                username,
+                password
+            );
+
+        res.json(result);
+
+    } catch(err) {
+
+        console.log(err);
+
+        res.json({
+            success: false,
+            message: "Server Error"
+        });
+
+    }
+
+});
+
+// =========================
+// START SERVER
+// =========================
+
+const PORT =
+    process.env.PORT || 3000;
+
+server.listen(PORT, () => {
 
     console.log(
-        "Server running on port " + PORT
+        "SERVER RUNNING:",
+        PORT
     );
 
 });
