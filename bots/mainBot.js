@@ -41,12 +41,8 @@ if (msg.handler === "bot_status" && msg.type === "child_ready") {
 
     CHILD_BOTS.push(msg.username);
 
-    sendPrivate(
-        msg.owner || "SYSTEM",
-        `ChildBot SUCCESSFULLY CREATED:
-User: ${msg.username}
-Room: ${msg.room}`
-    );
+         send(from, "Your Bot Successfully Created...");
+   
 }
             if (msg.handler === "login_event") {
 
@@ -112,7 +108,7 @@ async function createBot(owner, cmd) {
 
     if (res.success) CHILD_BOTS.push(user);
 
-    send(owner, res.success ? "ChildBot CREATED + JOINED" : "FAILED");
+    send(owner, res.success ? "Your Child Bot Request is now Proccesing.." : "FAILED");
 }
 
 function send(to, body) {
