@@ -19,7 +19,7 @@ function start(config) {
 
         console.log("[CHILDBOT START]", config.username);
 
-        // ================= CONNECT =================
+        // ================== CONNECT ==================
         socket.on("open", () => {
 
             socket.send(JSON.stringify({
