@@ -12,12 +12,11 @@ function start(config) {
 
         const socket = new WebSocket("wss://chatp.net:5333/server");
 
-        let loggedIn = false;
-        let roomReady = false;
+        let ready = false;
 
         console.log("[CHILDBOT START]", config.username);
 
-        // ================= CONNECTION =================
+        // ================= CONNECT =================
         socket.on("open", () => {
 
             socket.send(JSON.stringify({
@@ -43,7 +42,6 @@ function start(config) {
             if (msg.handler === "login_event") {
 
                 if (msg.type === "success") {
-                    loggedIn = true;
 
                     socket.send(JSON.stringify({
                         handler: "room_join",
@@ -53,51 +51,51 @@ function start(config) {
                 }
 
                 if (msg.type === "failed") {
-                    return resolve({ success: false });
+                    return resolve({
+                        success: false,
+                        stage: "login_failed"
+                    });
                 }
             }
 
-            // ================= ROOM EVENT =================
+            // ================= ROOM READY (FIXED MULTI SUPPORT) =================
             if (msg.handler === "room_event") {
 
-                // 🔴 ONLY TRUST TEXT EVENTS AFTER READY
-                if (!roomReady) {
+                const isJoin =
+                    msg.type === "you_joined" ||
+                    msg.type === "room_joined" ||
+                    msg.type === "joined";
 
-                    if (msg.type === "you_joined") {
+                if (isJoin && !ready) {
 
-                        roomReady = true;
+                    ready = true;
 
-                        console.log("[ROOM READY]", config.room);
+                    console.log("[ROOM READY]", config.room);
 
-                        // ⚠️ START QUIZ ONLY ONCE ROOM IS READY
-                        setTimeout(() => {
-                            QuizSystem.startQuiz(socket, config.room);
-                        }, 2000);
+                    // 🔥 SEND BACK CONFIRMATION (IMPORTANT FIX)
+                    socket.send(JSON.stringify({
+                        handler: "bot_status",
+                        type: "child_ready",
+                        room: config.room,
+                        username: config.username
+                    }));
 
-                        resolve({ success: true });
-                    }
+                    // start quiz AFTER stable join
+                    setTimeout(() => {
+                        QuizSystem.startQuiz(socket, config.room);
+                    }, 1500);
 
-                    return;
+                    return resolve({
+                        success: true,
+                        stage: "ready"
+                    });
                 }
 
                 handleRoom(socket, config, msg);
             }
         });
 
-        socket.on("close", () => {
-            console.log("[CHILDBOT CLOSED]", config.username);
-
-            // 🔥 AUTO RECONNECT FIX
-            setTimeout(() => {
-                start(config);
-            }, 5000);
-        });
-
-        socket.on("error", (e) => {
-            console.log("[CHILDBOT ERROR]", e.message);
-        });
-
-        // 🔥 KEEP ALIVE (VERY IMPORTANT)
+        // ================= KEEP ALIVE =================
         setInterval(() => {
             if (socket.readyState === 1) {
                 socket.send(JSON.stringify({
@@ -106,6 +104,16 @@ function start(config) {
                 }));
             }
         }, 20000);
+
+        socket.on("close", () => {
+            console.log("[CHILDBOT CLOSED]", config.username);
+
+            setTimeout(() => start(config), 5000);
+        });
+
+        socket.on("error", (e) => {
+            console.log("[CHILDBOT ERROR]", e.message);
+        });
 
     });
 }
@@ -119,12 +127,9 @@ function handleRoom(socket, config, msg) {
     const body = msg.body.trim().toLowerCase();
     const from = msg.from;
 
-    // QUIZ
     QuizSystem.handleAnswer(socket, config.room, from, body);
 
-    // ================= HELP =================
     if (body === "help") {
-
         send(socket, config.room,
 `BOT COMMANDS:
 help
@@ -133,7 +138,6 @@ myscore
 @welcome on/off`);
     }
 
-    // ================= MYSCORE =================
     if (body === "myscore") {
 
         const scores = loadJSON("./storage/scores.json", {});
