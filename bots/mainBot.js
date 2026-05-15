@@ -85,7 +85,7 @@ function handlePM(msg) {
     const body = (msg.body || "").trim();
 
     if (body === "help") {
-        send(from, "j/room#user#pass");
+        send(from, "to Create bot in your Room,Send j/room#user#pass,Bot Username must be grant as admin or Owner.");
     }
 
     if (body.startsWith("j/")) {
