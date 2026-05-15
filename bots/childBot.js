@@ -71,14 +71,21 @@ function start(config) {
 async function handleRoomEvent(socket, config, msg) {
 
     const type = msg.type;
-
+if (type === "you_joined") {
+sendRoomMessage(socket, config.room,
+                `"Im Ready to Work!"`
+            );
+}
     // ================= USER JOIN =================
     if (type === "user_joined" && config.welcome) {
 
         const text = [
-            `Welcome ${msg.username}`,
-            `Hello ${msg.username}`,
-            `Nice to see you ${msg.username}`
+            `😶Welcome ${msg.username}`,
+            `Hello😶 ${msg.username}`,
+ `How are You ${msg.username}`,
+             `😉 ${msg.username} WelcomeBack!`,
+             `yes😉 you are here ${msg.username}`,
+            `🙃Nice to see you ${msg.username}`
         ];
 
         sendRoomMessage(socket, config.room,
