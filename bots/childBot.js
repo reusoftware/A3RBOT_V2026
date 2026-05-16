@@ -103,16 +103,15 @@ function start(config) {
             if (msg.handler === "room_event") {
 
                 if (msg.type === "you_joined" && !joined) {
-
+   console.log("[ChildBot Joined the Room]");
                     joined = true;
 
-                    console.log("[ROOM JOINED]", config.room);
-
-                ///    sendRoomMessage(
-                 ///       socket,
-                 ///       config.room,
-                 ///       "Im a Bot and ready to work!"
-                ///    );
+                  
+            sendRoomMessage(
+                      socket,
+                       config.room,
+                       "Im a Bot and ready to work!"
+                   );
 
                     resolve({
                         success: true,
@@ -327,7 +326,41 @@ Best: ${user.best.toFixed(2)}s`
         );
     }
 }
+function sendRoomMessage(socket, room, body) {
 
+    try {
+
+        if (!socket) return;
+
+        if (socket.readyState !== 1) return;
+
+        socket.send(JSON.stringify({
+
+            handler: "room_message",
+
+            type: "text",
+
+            room: room,
+
+            body: body,
+
+            url: "",
+
+            length: "0",
+
+            id: packet()
+
+        }));
+
+        console.log("[ROOM SEND]", room, body);
+
+    } catch(err) {
+
+        console.log("[SEND ROOM ERROR]", err);
+
+    }
+
+}
 module.exports = {
     start
 };
