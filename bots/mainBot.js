@@ -14,23 +14,37 @@ function updatePanel() {
 
     try {
 
-        if (global.uiSocket && global.uiSocket.readyState === 1) {
+        if (
+            global.uiSocket &&
+            global.uiSocket.readyState === 1
+        ) {
 
-            const bots = Object.values(CHILD_BOTS).map(x => ({
-                room: x.room,
-                username: x.username
-            }));
+            const bots = Object.values(
+                global.CHILD_CONNECTED || {}
+            );
 
             global.uiSocket.send(JSON.stringify({
+
                 type: "dashboard",
-                count: bots.length,
-                bots
+
+                bots,
+
+                count: bots.length
+
             }));
+
+            console.log(
+                "[BOT COUNT]",
+                bots.length
+            );
         }
 
-    } catch (err) {
-        console.log("[PANEL ERROR]", err.message);
+    } catch(err) {
+
+        console.log("[UI ERROR]", err);
+
     }
+
 }
 
 function send(to, body) {
