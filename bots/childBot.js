@@ -191,8 +191,7 @@ function start(config) {
                     }));
 
                     // IMPORTANT FIX:
-                    // resolve after short delay
-                    // DO NOT WAIT FOR you_joined
+                
 
                     setTimeout(() => {
 
