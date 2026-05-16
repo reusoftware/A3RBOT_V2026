@@ -88,7 +88,7 @@ function start(config) {
 
             if (
                 msg.handler === "room_event" &&
-                (msg.type === "you_joined" )
+                (msg.type === "you_joined" ) 
             ) {
 
                 if (joined) return;
@@ -97,7 +97,7 @@ function start(config) {
                 console.log("[ROOM JOINED]", config.room);
 
                 // 🔥 CRITICAL FIX: WAIT BEFORE ANY MESSAGE
-                setTimeout(() => {
+               // setTimeout(() => {
 
                     sendRoomMessage(
                         socket,
@@ -105,7 +105,7 @@ function start(config) {
                         "Im a Bot and ready to work!"
                     );
 
-                }, 5000);
+              //  }, 5000);
 
                 // START QUIZ AFTER STABLE CONNECTION
                 setTimeout(() => {
