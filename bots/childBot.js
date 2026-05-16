@@ -85,11 +85,11 @@ function start(config) {
 
                 console.log("[BOT JOINED]", key);
 
-                global.CHILD_CONNECTED = global.CHILD_CONNECTED || {};
-                global.CHILD_CONNECTED[config.room] = {
-                    room: config.room,
-                    username: config.username
-                };
+              ///  global.CHILD_CONNECTED = global.CHILD_CONNECTED || {};
+               /// global.CHILD_CONNECTED[config.room] = {
+               ///     room: config.room,
+               ///     username: config.username
+              ///  };
 
                 send(socket, {
                     handler: "room_message",
