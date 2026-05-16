@@ -1,17 +1,43 @@
 const WebSocket = require("ws");
-
 const QuizSystem = require("./quizSystem");
-
-const {
-    loadJSON,
-    saveJSON
-} = require("./storage");
+const { loadJSON, saveJSON } = require("./storage");
 
 function packet() {
     return "BOT-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
 
-// ======================================
+function sendRoomMessage(socket, room, body) {
+
+    try {
+
+        if (socket.readyState !== 1) return;
+
+        socket.send(JSON.stringify({
+            handler: "room_message",
+            type: "text",
+            room,
+            body,
+            id: packet()
+        }));
+
+    } catch (err) {
+        console.log("[ROOM SEND ERROR]", err.message);
+    }
+}
+
+function saveBotConfig(config) {
+
+    let bots = loadJSON("./storage/bots.json", []);
+
+    const index = bots.findIndex(x => x.room === config.room);
+
+    if (index !== -1) {
+
+        bots[index] = config;
+
+        saveJSON("./storage/bots.json", bots);
+    }
+}
 
 function start(config) {
 
@@ -26,549 +52,281 @@ function start(config) {
         if (config.quiz === undefined)
             config.quiz = false;
 
-        const socket = new WebSocket(
-            "wss://chatp.net:5333/server"
-        );
+        const socket = new WebSocket("wss://chatp.net:5333/server");
 
-        let roomReady = false;
+        let joined = false;
+        let reconnecting = false;
 
-        console.log(
-            "[BOT START]",
-            config.username
-        );
-
-        // ======================================
-        // OPEN
-        // ======================================
+        console.log("[BOT START]", config.username);
 
         socket.on("open", () => {
 
-            console.log(
-                "[BOT CONNECTED]",
-                config.username
-            );
-
             socket.send(JSON.stringify({
-
                 handler: "login",
-
                 username: config.username,
-
                 password: config.password,
-
                 id: packet()
-
             }));
-
         });
 
-        // ======================================
-        // MESSAGE
-        // ======================================
+        socket.on("message", async (data) => {
 
-        socket.on("message", async(data) => {
+            let msg;
 
             try {
+                msg = JSON.parse(data.toString());
+            } catch {
+                return;
+            }
 
-                const msg = JSON.parse(
-                    data.toString()
-                );
+            if (msg.handler === "login_event") {
 
-                // ======================================
-                // LOGIN SUCCESS
-                // ======================================
+                if (msg.type === "success") {
 
-                if (
-                    msg.handler === "login_event" &&
-                    msg.type === "success"
-                ) {
-
-                    console.log(
-                        "[LOGIN SUCCESS]",
-                        config.username
-                    );
+                    console.log("[LOGIN SUCCESS]", config.username);
 
                     socket.send(JSON.stringify({
-
                         handler: "room_join",
-
                         name: config.room,
-
                         id: packet()
-
                     }));
-
-                    return;
                 }
 
-                // ======================================
-                // LOGIN FAILED
-                // ======================================
+                if (msg.type === "failed") {
 
-                if (
-                    msg.handler === "login_event" &&
-                    (
-                        msg.type === "failed" ||
-                        msg.type === "error"
-                    )
-                ) {
+                    console.log("[LOGIN FAILED]", config.username);
 
-                    console.log(
-                        "[LOGIN FAILED]",
-                        config.username
-                    );
-
-                    return resolve({
-                        success: false
-                    });
-
+                    return resolve({ success: false });
                 }
+            }
 
-                // ======================================
-                // ROOM READY
-                // ======================================
+            if (msg.handler === "room_event") {
 
-                if (
-                    msg.handler === "room_event" &&
-                    msg.type === "you_joined"
-                ) {
+                if (msg.type === "you_joined" && !joined) {
 
-                    if (roomReady)
-                        return;
+                    joined = true;
 
-                    roomReady = true;
-
-                    console.log(
-                        "[ROOM READY]",
-                        config.room
-                    );
+                    console.log("[ROOM JOINED]", config.room);
 
                     sendRoomMessage(
                         socket,
                         config.room,
-                        "🤖 Im a Bot and ready to work!"
+                        "Im a Bot and ready to work!"
                     );
-
-                    // QUIZ DELAYED
-                    if (config.quiz) {
-
-                        setTimeout(() => {
-
-                            QuizSystem.startQuiz(
-                                socket,
-                                config.room
-                            );
-
-                        }, 5000);
-
-                    }
 
                     resolve({
                         success: true,
                         socket
                     });
-
-                    return;
                 }
 
-                // ======================================
-                // IGNORE UNTIL READY
-                // ======================================
-
-                if (!roomReady)
-                    return;
-
-                // ======================================
-                // ROOM EVENTS
-                // ======================================
-
-                if (
-                    msg.handler === "room_event"
-                ) {
-
-                    await handleRoomEvent(
-                        socket,
-                        config,
-                        msg
-                    );
-
-                }
-
-            } catch(err) {
-
-                console.log(
-                    "[BOT MESSAGE ERROR]",
-                    err
-                );
-
+                await handleRoomEvent(socket, config, msg);
             }
-
         });
-
-        // ======================================
-        // CLOSE
-        // ======================================
 
         socket.on("close", () => {
 
-            console.log(
-                "[BOT CLOSED]",
-                config.username
-            );
+            console.log("[BOT CLOSED]", config.username);
 
+            if (reconnecting) return;
+
+            reconnecting = true;
+
+            setTimeout(() => {
+                start(config);
+            }, 10000);
         });
-
-        // ======================================
-        // ERROR
-        // ======================================
 
         socket.on("error", (err) => {
-
-            console.log(
-                "[BOT ERROR]",
-                err.message
-            );
-
+            console.log("[BOT ERROR]", err.message);
         });
-
-        // ======================================
-        // KEEP ALIVE
-        // ======================================
 
         setInterval(() => {
 
-            if (
-                socket.readyState === 1
-            ) {
+            try {
 
-                socket.send(JSON.stringify({
+                if (socket.readyState === 1) {
 
-                    handler: "ping",
+                    socket.send(JSON.stringify({
+                        handler: "ping",
+                        id: packet()
+                    }));
+                }
 
-                    id: packet()
+            } catch {}
 
-                }));
-
-            }
-
-        }, 20000);
+        }, 25000);
 
     });
-
 }
 
-// ======================================
-// ROOM EVENTS
-// ======================================
-
-async function handleRoomEvent(
-    socket,
-    config,
-    msg
-) {
+async function handleRoomEvent(socket, config, msg) {
 
     const type = msg.type;
 
-    // ======================================
-    // USER JOINED
-    // ======================================
+    if (type === "user_joined") {
 
-    if (
-        type === "user_joined"
-    ) {
+        if (config.welcome === false) return;
 
-        if (!config.welcome)
-            return;
+        const username = msg.username || msg.from || "User";
 
-        const text = [
-
-            `Welcome ${msg.username}`,
-
-            `Hello ${msg.username}`,
-
-            `Nice to see you ${msg.username}`
-
+        const welcomes = [
+            `Welcome ${username}`,
+            `Hello ${username}`,
+            `Nice to see you ${username}`,
+            `Enjoy your stay ${username}`
         ];
 
         sendRoomMessage(
-
             socket,
-
             config.room,
-
-            text[
-                Math.floor(
-                    Math.random() * text.length
-                )
-            ]
-
+            welcomes[Math.floor(Math.random() * welcomes.length)]
         );
-
-        return;
     }
 
-    // ======================================
-    // TEXT MESSAGE
-    // ======================================
+    if (
+        type !== "text" &&
+        type !== "message" &&
+        type !== "chat"
+    ) return;
 
-    if (type !== "text")
-        return;
+    if (!msg.body) return;
 
-    if (!msg.body)
-        return;
-
-    const body =
-        msg.body
-        .toLowerCase()
-        .trim();
-
+    const body = msg.body.toLowerCase().trim();
     const from = msg.from;
 
-    console.log(
-        "[ROOM]",
-        from,
-        body
-    );
+    console.log(`[ROOM] ${from}: ${body}`);
 
-    // ======================================
-    // QUIZ ANSWER
-    // ======================================
-
-    QuizSystem.handleAnswer(
-        socket,
-        config.room,
-        from,
-        body
-    );
-
-    // ======================================
-    // HELP
-    // ======================================
+    const isMainMaster = from === config.owner;
+    const isRoomMaster = config.roomMasters.includes(from);
+    const isMaster = isMainMaster || isRoomMaster;
 
     if (body === "help") {
 
-        return sendRoomMessage(
-            socket,
-            config.room,
-
+        return sendRoomMessage(socket, config.room,
 `BOT COMMANDS
 
 help
 myscore
+masters
+
+@welcome on
+@welcome off
 
 @quiz on
 @quiz off
 
-@welcome on
-@welcome off`
+@addmaster username
+@removemaster username`
         );
-
     }
 
-    // ======================================
-    // MASTER CHECK
-    // ======================================
+    if (body === "masters") {
 
-    const isMaster =
-        from === config.owner ||
-        config.roomMasters.includes(from);
+        return sendRoomMessage(
+            socket,
+            config.room,
+            config.roomMasters.length === 0
+                ? "No room masters"
+                : config.roomMasters.join(", ")
+        );
+    }
 
-    // ======================================
-    // QUIZ ON
-    // ======================================
+    if (body.startsWith("@addmaster ")) {
 
-    if (
-        body === "@quiz on"
-    ) {
+        if (!isMaster) return;
 
-        if (!isMaster)
-            return;
+        const target = body.replace("@addmaster ", "").trim();
+
+        if (!config.roomMasters.includes(target)) {
+
+            config.roomMasters.push(target);
+            saveBotConfig(config);
+        }
+
+        return sendRoomMessage(socket, config.room, `${target} added as master.`);
+    }
+
+    if (body.startsWith("@removemaster ")) {
+
+        if (!isMaster) return;
+
+        const target = body.replace("@removemaster ", "").trim();
+
+        config.roomMasters = config.roomMasters.filter(x => x !== target);
+
+        saveBotConfig(config);
+
+        return sendRoomMessage(socket, config.room, `${target} removed.`);
+    }
+
+    if (body === "@welcome on") {
+
+        if (!isMaster) return;
+
+        config.welcome = true;
+        saveBotConfig(config);
+
+        return sendRoomMessage(socket, config.room, "Welcome enabled.");
+    }
+
+    if (body === "@welcome off") {
+
+        if (!isMaster) return;
+
+        config.welcome = false;
+        saveBotConfig(config);
+
+        return sendRoomMessage(socket, config.room, "Welcome disabled.");
+    }
+
+    if (body === "@quiz on") {
+
+        if (!isMaster) return;
 
         config.quiz = true;
 
         saveBotConfig(config);
 
-        QuizSystem.startQuiz(
-            socket,
-            config.room
-        );
+        QuizSystem.startQuiz(socket, config.room);
 
-        return sendRoomMessage(
-            socket,
-            config.room,
-            "Quiz enabled."
-        );
-
+        return sendRoomMessage(socket, config.room, "Quiz enabled.");
     }
 
-    // ======================================
-    // QUIZ OFF
-    // ======================================
+    if (body === "@quiz off") {
 
-    if (
-        body === "@quiz off"
-    ) {
-
-        if (!isMaster)
-            return;
+        if (!isMaster) return;
 
         config.quiz = false;
 
         saveBotConfig(config);
 
-        return sendRoomMessage(
-            socket,
-            config.room,
-            "Quiz disabled."
-        );
+        QuizSystem.stopQuiz(config.room);
 
+        return sendRoomMessage(socket, config.room, "Quiz disabled.");
     }
 
-    // ======================================
-    // WELCOME ON
-    // ======================================
-
-    if (
-        body === "@welcome on"
-    ) {
-
-        if (!isMaster)
-            return;
-
-        config.welcome = true;
-
-        saveBotConfig(config);
-
-        return sendRoomMessage(
-            socket,
-            config.room,
-            "Welcome enabled."
-        );
-
+    if (config.quiz) {
+        QuizSystem.handleAnswer(socket, config.room, from, body);
     }
 
-    // ======================================
-    // WELCOME OFF
-    // ======================================
+    if (body === "myscore") {
 
-    if (
-        body === "@welcome off"
-    ) {
-
-        if (!isMaster)
-            return;
-
-        config.welcome = false;
-
-        saveBotConfig(config);
-
-        return sendRoomMessage(
-            socket,
-            config.room,
-            "Welcome disabled."
-        );
-
-    }
-
-    // ======================================
-    // MYSCORE
-    // ======================================
-
-    if (
-        body === "myscore"
-    ) {
-
-        const scores = loadJSON(
-            "./storage/scores.json",
-            {}
-        );
+        const scores = loadJSON("./storage/scores.json", {});
 
         if (!scores[from]) {
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-                "No score yet."
-            );
-
+            return sendRoomMessage(socket, config.room, "No score yet.");
         }
 
-        const u = scores[from];
+        const user = scores[from];
 
-        return sendRoomMessage(
-
-            socket,
-
-            config.room,
-
+        return sendRoomMessage(socket, config.room,
 `${from}
-
-Score: ${u.score}
-
-Best:
-${u.best.toFixed(2)}s`
-
+Score: ${user.score}
+Best: ${user.best.toFixed(2)}s`
         );
-
     }
-
 }
-
-// ======================================
-
-function saveBotConfig(config) {
-
-    let bots = loadJSON(
-        "./storage/bots.json",
-        []
-    );
-
-    const index = bots.findIndex(
-        x => x.room === config.room
-    );
-
-    if (index !== -1) {
-
-        bots[index] = config;
-
-        saveJSON(
-            "./storage/bots.json",
-            bots
-        );
-
-    }
-
-}
-
-// ======================================
-
-function sendRoomMessage(
-    socket,
-    room,
-    body
-) {
-
-    if (
-        socket.readyState !== 1
-    ) return;
-
-    socket.send(JSON.stringify({
-
-        handler: "room_message",
-
-        type: "text",
-
-        room,
-
-        body,
-
-        id: packet()
-
-    }));
-
-}
-
-// ======================================
 
 module.exports = {
     start
