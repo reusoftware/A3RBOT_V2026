@@ -5,7 +5,7 @@ const { loadJSON, saveJSON } = require("./storage");
 function packet() {
     return "BOT-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
-
+///=====
 function start(config) {
 
     return new Promise((resolve) => {
