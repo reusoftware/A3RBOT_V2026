@@ -9,7 +9,7 @@ function packet() {
     return "MAIN-" + Date.now();
 }
 
-// ================= DASHBOARD =================
+// ================= UI UPDATE FIX =================
 function updatePanel() {
 
     if (!global.uiSocket || global.uiSocket.readyState !== 1) return;
@@ -45,79 +45,86 @@ function start(username, password) {
 
         socket.on("message", async (data) => {
 
-            let msg;
-            try {
-                msg = JSON.parse(data);
-            } catch { return; }
+            let msg = JSON.parse(data);
 
             if (msg.handler === "login_event" && msg.type === "success") {
-                loadSaved();
                 resolve({ success: true });
+                loadSavedBots();
             }
 
             if (msg.handler === "chat_message") {
                 handlePM(msg);
             }
+
         });
+
+        socket.on("close", () => {
+            setTimeout(() => start(username, password), 5000);
+        });
+
     });
+}
+
+// ================= CREATE BOT =================
+async function createBot(owner, cmd) {
+
+    const [room, user, pass] = cmd.substring(2).split("#");
+
+    if (CHILD_BOTS[room]) {
+        return send(owner, "Bot already exists in room");
+    }
+
+    const result = await ChildBot.start({
+        room,
+        username: user,
+        password: pass,
+        owner
+    });
+
+    if (!result.success) {
+        return send(owner, "Bot failed");
+    }
+
+    CHILD_BOTS[room] = result.socket;
+
+    updatePanel();
+
+    send(owner, "Bot created!");
+}
+
+// ================= LOAD =================
+async function loadSavedBots() {
+
+    const bots = loadJSON("./storage/bots.json", []);
+
+    for (const bot of bots) {
+
+        if (CHILD_BOTS[bot.room]) continue;
+
+        const result = await ChildBot.start(bot);
+
+        if (result.success) {
+            CHILD_BOTS[bot.room] = result.socket;
+        }
+    }
+
+    updatePanel();
 }
 
 // ================= PM =================
 function handlePM(msg) {
 
     const from = msg.from;
-    const body = (msg.body || "").trim();
-
-    if (body === "help") {
-        return send(from, "j/room#user#pass");
-    }
+    const body = msg.body;
 
     if (body.startsWith("j/")) {
         createBot(from, body);
     }
+
 }
 
-// ================= CREATE BOT =================
-async function createBot(owner, cmd) {
-
-    const [room, username, password] = cmd.substring(2).split("#");
-
-    const config = {
-        room,
-        username,
-        password,
-        owner
-    };
-
-    send(owner, "Creating bot...");
-
-    const res = await ChildBot.start(config);
-
-    if (!res.success) {
-        return send(owner, "Failed bot");
-    }
-
-    CHILD_BOTS[room] = res.socket;
-
-    updatePanel();
-
-    send(owner, "Bot created");
-}
-
-// ================= LOAD =================
-async function loadSaved() {
-
-    const bots = loadJSON("./storage/bots.json", []);
-
-    for (const b of bots) {
-        await ChildBot.start(b);
-    }
-
-    updatePanel();
-}
-
-// ================= SEND =================
 function send(to, body) {
+
     if (!socket || socket.readyState !== 1) return;
 
     socket.send(JSON.stringify({
