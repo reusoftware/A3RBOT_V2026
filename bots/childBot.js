@@ -5,7 +5,7 @@ const { loadJSON, saveJSON } = require("./storage");
 function packet() {
     return "BOT-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
-///=====
+
 function start(config) {
 
     return new Promise((resolve) => {
@@ -53,21 +53,22 @@ function start(config) {
             // ================= ROOM JOIN CONFIRM =================
             if (msg.handler === "room_event" && msg.type === "you_joined") {
  
-                setTimeout(() => {
+               /// setTimeout(() => {
                 if (joined) return;
                 joined = true;
                 ready = true;
-
+   setTimeout(() => {
                 console.log("[CHILDBOT READY]", config.username);
 
                 global.CHILD_CONNECTED = global.CHILD_CONNECTED || {};
                 global.CHILD_CONNECTED[config.room] = {
                     room: config.room,
                     username: config.username
+                       }, 1500);
                 };
 
                 // IMPORTANT: delay bot messages (prevents kick)
-              ///  setTimeout(() => {
+             setTimeout(() => {
                     sendRoomMessage(socket, config.room, "Im a Bot and ready to work!");
                 }, 1500);
 
