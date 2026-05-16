@@ -211,21 +211,21 @@ function start(config) {
                             );
   }, 8000);
                           
-                                setTimeout(() => {
+                            //    setTimeout(() => {
 
-                                    QuizSystem.startQuiz(
-                                        socket,
-                                        config.room
+                             //       QuizSystem.startQuiz(
+                              //          socket,
+                             //           config.room
                                     );
 
-                                }, 10000);
+                           //     }, 10000);
 
                           
 
-                            resolve({
-                                success: true,
-                                socket
-                            });
+                         //   resolve({
+                         //       success: true,
+                         //       socket
+                        //    });
 
                         }
 
