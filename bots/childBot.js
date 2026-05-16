@@ -108,11 +108,11 @@ function start(config) {
 
                     console.log("[ROOM JOINED]", config.room);
 
-                    sendRoomMessage(
-                        socket,
-                        config.room,
-                        "Im a Bot and ready to work!"
-                    );
+                ///    sendRoomMessage(
+                 ///       socket,
+                 ///       config.room,
+                 ///       "Im a Bot and ready to work!"
+                ///    );
 
                     resolve({
                         success: true,
