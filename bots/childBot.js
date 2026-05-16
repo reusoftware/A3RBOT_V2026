@@ -203,13 +203,13 @@ function start(config) {
                                 "[BOT READY]",
                                 config.username
                             );
-
+   setTimeout(() => {
                             sendRoomMessage(
                                 socket,
                                 config.room,
                                 "Im a Bot and ready to work!"
                             );
-
+  }, 8000);
                             // AUTO START QUIZ
                             if (config.quiz) {
 
@@ -220,7 +220,7 @@ function start(config) {
                                         config.room
                                     );
 
-                                }, 5000);
+                                }, 10000);
 
                             }
 
