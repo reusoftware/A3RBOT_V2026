@@ -52,7 +52,8 @@ function start(config) {
 
             // ================= ROOM JOIN CONFIRM =================
             if (msg.handler === "room_event" && msg.type === "you_joined") {
-
+ 
+                setTimeout(() => {
                 if (joined) return;
                 joined = true;
                 ready = true;
@@ -66,7 +67,7 @@ function start(config) {
                 };
 
                 // IMPORTANT: delay bot messages (prevents kick)
-                setTimeout(() => {
+              ///  setTimeout(() => {
                     sendRoomMessage(socket, config.room, "Im a Bot and ready to work!");
                 }, 1500);
 
