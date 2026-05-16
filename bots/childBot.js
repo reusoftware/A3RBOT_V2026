@@ -105,14 +105,14 @@ function start(config) {
                         "Im a Bot and ready to work!"
                     );
 
-                }, 10000);
+                }, 5000);
 
                 // START QUIZ AFTER STABLE CONNECTION
                 setTimeout(() => {
 
-                    if (config.quiz) {
-                        QuizSystem.startQuiz(socket, config.room);
-                    }
+                ///    if (config.quiz) {
+                ///        QuizSystem.startQuiz(socket, config.room);
+                ///    }
 
                 }, 12000);
 
