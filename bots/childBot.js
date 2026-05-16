@@ -271,7 +271,7 @@ function start(config) {
                         "Im a Bot and ready to work!"
                     );
 
-                }, 8000);
+                },20000);
 
                 // START QUIZ AFTER ROOM STABLE
 
