@@ -112,7 +112,14 @@ function start(config) {
                        config.room,
                        "Im a Bot and ready to work!"
                    );
+   global.CHILD_CONNECTED = global.CHILD_CONNECTED || {};
 
+    global.CHILD_CONNECTED[config.room] = {
+        room: config.room,
+        username: config.username
+    };
+
+    return;
                     resolve({
                         success: true,
                         socket
@@ -279,31 +286,46 @@ masters
         return sendRoomMessage(socket, config.room, "Welcome disabled.");
     }
 
-    if (body === "@quiz on") {
+if (body === "@quiz on") {
 
-        if (!isMaster) return;
+    if (!isMaster)
+        return;
 
-        config.quiz = true;
+    config.quiz = true;
 
-        saveBotConfig(config);
+    saveBotConfig(config);
 
-        QuizSystem.startQuiz(socket, config.room);
+    QuizSystem.startQuiz(
+        socket,
+        config.room
+    );
 
-        return sendRoomMessage(socket, config.room, "Quiz enabled.");
-    }
+    sendRoomMessage(
+        socket,
+        config.room,
+        "Quiz enabled."
+    );
 
-    if (body === "@quiz off") {
+}
 
-        if (!isMaster) return;
+   if (body === "@quiz off") {
 
-        config.quiz = false;
+    if (!isMaster)
+        return;
 
-        saveBotConfig(config);
+    config.quiz = false;
 
-        QuizSystem.stopQuiz(config.room);
+    saveBotConfig(config);
 
-        return sendRoomMessage(socket, config.room, "Quiz disabled.");
-    }
+    QuizSystem.stopQuiz(config.room);
+
+    sendRoomMessage(
+        socket,
+        config.room,
+        "Quiz disabled."
+    );
+
+}
 
     if (config.quiz) {
         QuizSystem.handleAnswer(socket, config.room, from, body);
