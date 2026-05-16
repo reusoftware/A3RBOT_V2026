@@ -3,34 +3,19 @@ const ChildBot = require("./childBot");
 const { loadJSON, saveJSON } = require("./storage");
 
 let socket;
-let CHILD = {};
+let ACTIVE_BOTS = {}; // room => bot
 
 function packet() {
     return "MAIN-" + Date.now();
 }
 
-// ================= PANEL =================
-function updatePanel() {
-
-    if (!global.uiSocket || global.uiSocket.readyState !== 1) return;
-
-    const bots = Object.values(global.CHILD_CONNECTED || {});
-
-    global.uiSocket.send(JSON.stringify({
-        type: "dashboard",
-        bots,
-        count: bots.length
-    }));
-
-    console.log("[BOT COUNT]", bots.length);
-}
-
-// ================= START =================
 function start(username, password) {
 
     return new Promise((resolve) => {
 
         socket = new WebSocket("wss://chatp.net:5333/server");
+
+        let done = false;
 
         socket.on("open", () => {
 
@@ -40,77 +25,105 @@ function start(username, password) {
                 password,
                 id: packet()
             }));
-
         });
 
-        socket.on("message", (data) => {
+        socket.on("message", async (data) => {
 
-            const msg = JSON.parse(data);
+            let msg;
+            try {
+                msg = JSON.parse(data);
+            } catch { return; }
 
-            if (msg.handler === "login_event" && msg.type === "success") {
-                resolve({ success: true });
-                loadBots();
+            // LOGIN
+            if (msg.handler === "login_event") {
+
+                if (msg.type === "success") {
+                    console.log("[MAIN LOGIN OK]");
+                    if (!done) {
+                        done = true;
+                        resolve({ success: true });
+                    }
+
+                    loadSavedBots();
+                }
             }
 
+            // PRIVATE MESSAGE
             if (msg.handler === "chat_message") {
                 handlePM(msg);
             }
-
         });
 
-        setInterval(updatePanel, 5000);
+        socket.on("close", () => {
+            console.log("[MAIN CLOSED]");
+            setTimeout(() => start(username, password), 5000);
+        });
 
     });
 }
 
 // ================= CREATE BOT =================
-async function createBot(owner, cmd) {
+async function createBot(owner, body) {
 
-    const [room, user, pass] = cmd.substring(2).split("#");
+    const [room, user, pass] = body.substring(2).split("#");
 
-    if (CHILD[room]) {
-        return send(owner, "Bot already exists");
-    }
+    if (!room || !user || !pass)
+        return send(owner, "Invalid format");
 
-    const res = await ChildBot.start({
+    let bots = loadJSON("./storage/bots.json", []);
+
+    if (ACTIVE_BOTS[room])
+        return send(owner, "Bot already active in this room");
+
+    const config = {
         room,
         username: user,
         password: pass,
-        owner
-    });
+        owner,
+        roomMasters: [],
+        welcome: true,
+        quiz: false
+    };
 
-    if (!res.success) return send(owner, "Failed");
+    send(owner, "Creating bot...");
 
-    CHILD[room] = res.socket;
+    const result = await ChildBot.start(config);
 
-    updatePanel();
+    if (!result.success)
+        return send(owner, "Bot failed to join/login");
 
-    send(owner, "Bot created");
+    ACTIVE_BOTS[room] = result.bot;
+
+    bots.push(config);
+    saveJSON("./storage/bots.json", bots);
+
+    send(owner, `Bot ACTIVE in ${room}`);
 }
 
-// ================= LOAD =================
-async function loadBots() {
+// ================= LOAD SAVED =================
+async function loadSavedBots() {
 
-    const bots = loadJSON("./storage/bots.json", []);
+    let bots = loadJSON("./storage/bots.json", []);
 
     for (const b of bots) {
-        if (CHILD[b.room]) continue;
 
-        const res = await ChildBot.start(b);
+        const result = await ChildBot.start(b);
 
-        if (res.success) {
-            CHILD[b.room] = res.socket;
+        if (result.success) {
+            ACTIVE_BOTS[b.room] = result.bot;
         }
     }
-
-    updatePanel();
 }
 
 // ================= PM =================
 function handlePM(msg) {
 
     const from = msg.from;
-    const body = msg.body;
+    const body = (msg.body || "").trim();
+
+    if (body === "help") {
+        return send(from, "j/room#user#pass");
+    }
 
     if (body.startsWith("j/")) {
         createBot(from, body);
@@ -118,9 +131,6 @@ function handlePM(msg) {
 }
 
 function send(to, body) {
-
-    if (!socket || socket.readyState !== 1) return;
-
     socket.send(JSON.stringify({
         handler: "chat_message",
         type: "text",
