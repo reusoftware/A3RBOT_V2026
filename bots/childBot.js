@@ -88,7 +88,7 @@ function start(config) {
 
             if (
                 msg.handler === "room_event" &&
-                (msg.type === "you_joined" || msg.type === "joined")
+                (msg.type === "you_joined" )
             ) {
 
                 if (joined) return;
@@ -105,7 +105,7 @@ function start(config) {
                         "Im a Bot and ready to work!"
                     );
 
-                }, 6000);
+                }, 10000);
 
                 // START QUIZ AFTER STABLE CONNECTION
                 setTimeout(() => {
