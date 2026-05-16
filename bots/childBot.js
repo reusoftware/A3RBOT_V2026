@@ -1,161 +1,142 @@
 const WebSocket = require("ws");
-const QuizSystem = require("./quizSystem");
 
-const ACTIVE = global.__CHILD_ACTIVE || (global.__CHILD_ACTIVE = {});
-
-function packet() {
-    return "BOT-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
-}
-
-function send(socket, data) {
-    if (socket && socket.readyState === 1) {
-        socket.send(JSON.stringify(data));
-    }
+function generatePacketID() {
+    return "BOT-" + Date.now();
 }
 
 function start(config) {
 
-    const key = `${config.username}@${config.room}`;
+    try {
 
-    // ❌ BLOCK DUPLICATE BOT INSTANCE
-    if (ACTIVE[key]) {
-        console.log("[BLOCK DUPLICATE BOT]", key);
-        return Promise.resolve({
-            success: true,
-            socket: ACTIVE[key].socket
-        });
-    }
+        const socket = new WebSocket(
+            "wss://chatp.net:5333/server"
+        );
 
-    const socket = new WebSocket("wss://chatp.net:5333/server");
+        // =========================
+        // CONNECT
+        // =========================
 
-    let joined = false;
+        socket.on("open", () => {
 
-    console.log("[BOT START]", key);
+            console.log(
+                `[CHILDBOT CONNECTED] ${config.username}`
+            );
 
-    ACTIVE[key] = { socket, config };
+            socket.send(JSON.stringify({
+                handler: "login",
+                username: config.username,
+                password: config.password,
+                id: generatePacketID()
+            }));
 
-    socket.on("open", () => {
-
-        send(socket, {
-            handler: "login",
-            username: config.username,
-            password: config.password,
-            id: packet()
         });
 
-    });
+        // =========================
+        // MESSAGE
+        // =========================
 
-    socket.on("message", async (data) => {
+        socket.on("message", async(data) => {
 
-        let msg;
-        try {
-            msg = JSON.parse(data);
-        } catch {
-            return;
-        }
+            try {
 
-        if (msg.handler === "login_event" && msg.type === "success") {
+                const msg = JSON.parse(data);
 
-            send(socket, {
-                handler: "room_join",
-                name: config.room,
-                id: packet()
-            });
-        }
+                console.log(
+                    "[CHILDBOT RAW]",
+                    msg
+                );
 
-        if (msg.handler === "room_event") {
+                // LOGIN SUCCESS
+                if (
+                    msg.handler === "login_event" &&
+                    msg.type === "success"
+                ) {
 
-            // ❌ HANDLE KICK / INVALID JOIN
-            if (
-                msg.type === "you_kicked" ||
-                msg.type === "not_allowed" ||
-                msg.type === "room_closed"
-            ) {
-                console.log("[BOT KICKED]", key);
+                    console.log(
+                        `[CHILDBOT LOGIN SUCCESS] ${config.username}`
+                    );
 
-                socket.close();
-                delete ACTIVE[key];
-                return;
+                    socket.send(JSON.stringify({
+                        handler: "room_join",
+                        name: config.room,
+                        id: generatePacketID()
+                    }));
+
+                }
+
+                // LOGIN FAILED
+                if (
+                    msg.handler === "login_event" &&
+                    (
+                        msg.type === "failed" ||
+                        msg.type === "error"
+                    )
+                ) {
+
+                    console.log(
+                        `[CHILDBOT LOGIN FAILED] ${config.username}`
+                    );
+
+                }
+
+                // ROOM EVENT
+                if (
+                    msg.handler === "room_event"
+                ) {
+
+                    console.log(
+                        `[ROOM EVENT] ${msg.type}`
+                    );
+
+                }
+
+            } catch(err) {
+
+                console.log(
+                    "CHILDBOT MESSAGE ERROR:",
+                    err
+                );
+
             }
 
-            // ✅ CONFIRMED JOIN
-            if (msg.type === "you_joined" && !joined) {
+        });
 
-                joined = true;
+        // =========================
+        // ERROR
+        // =========================
 
-                console.log("[BOT JOINED]", key);
+        socket.on("error", (err) => {
 
-              ///  global.CHILD_CONNECTED = global.CHILD_CONNECTED || {};
-               /// global.CHILD_CONNECTED[config.room] = {
-               ///     room: config.room,
-               ///     username: config.username
-              ///  };
+            console.log(
+                "CHILDBOT SOCKET ERROR:",
+                err
+            );
 
-                send(socket, {
-                    handler: "room_message",
-                    type: "text",
-                    room: config.room,
-                    body: "🤖 Bot ready",
-                    id: packet()
-                });
+        });
 
-                return Promise.resolve({
-                    success: true,
-                    socket
-                });
-            }
+        // =========================
+        // CLOSE
+        // =========================
 
-            handleRoom(socket, config, msg);
-        }
+        socket.on("close", () => {
 
-    });
+            console.log(
+                `[CHILDBOT CLOSED] ${config.username}`
+            );
 
-    socket.on("close", () => {
+        });
 
-        console.log("[BOT CLOSED]", key);
+    } catch(err) {
 
-        delete ACTIVE[key];
-        delete (global.CHILD_CONNECTED || {})[config.room];
+        console.log(
+            "CHILDBOT CRASH:",
+            err
+        );
 
-    });
+    }
 
-    socket.on("error", (e) => {
-        console.log("[BOT ERROR]", e.message);
-    });
-
-    // KEEP ALIVE
-    setInterval(() => {
-        send(socket, { handler: "ping", id: packet() });
-    }, 20000);
-
-    return Promise.resolve({ success: true, socket });
 }
 
-// ================= ROOM =================
-function handleRoom(socket, config, msg) {
-
-    if (!msg.body) return;
-
-    const body = msg.body.toLowerCase().trim();
-    const from = msg.from;
-
-    const isMaster =
-        from === config.owner ||
-        (config.roomMasters || []).includes(from);
-
-    if (body === "@quiz on" && isMaster) {
-        config.quiz = true;
-        QuizSystem.startQuiz(socket, config.room);
-    }
-
-    if (body === "@quiz off" && isMaster) {
-        config.quiz = false;
-        QuizSystem.stopQuiz(config.room);
-    }
-
-    if (config.quiz) {
-        QuizSystem.handleAnswer(socket, config.room, from, body);
-    }
-}
-
-module.exports = { start };
+module.exports = {
+    start
+};
