@@ -1,141 +1,591 @@
 const WebSocket = require("ws");
 
+const QuizSystem = require("./quizSystem");
+
+const {
+    loadJSON,
+    saveJSON
+} = require("./storage");
+
 function generatePacketID() {
     return "BOT-" + Date.now();
 }
 
+// ======================================
+// START BOT
+// ======================================
+
 function start(config) {
 
-    try {
+    // DEFAULT SETTINGS
+    if (!config.roomMasters)
+        config.roomMasters = [];
 
-        const socket = new WebSocket(
-            "wss://chatp.net:5333/server"
+    if (config.welcome === undefined)
+        config.welcome = true;
+
+    if (config.quiz === undefined)
+        config.quiz = true;
+
+    const socket = new WebSocket(
+        "wss://chatp.net:5333/server"
+    );
+
+    console.log(
+        "[CHILDBOT STARTING]",
+        config.username
+    );
+
+    // =========================
+    // CONNECT
+    // =========================
+
+    socket.on("open", () => {
+
+        console.log(
+            `[CONNECTED] ${config.username}`
         );
 
-        // =========================
-        // CONNECT
-        // =========================
+        socket.send(JSON.stringify({
+            handler: "login",
+            username: config.username,
+            password: config.password,
+            id: generatePacketID()
+        }));
 
-        socket.on("open", () => {
+    });
+
+    // =========================
+    // RECEIVE MESSAGE
+    // =========================
+
+    socket.on("message", async(data) => {
+
+        try {
+
+            const msg = JSON.parse(data);
 
             console.log(
-                `[CHILDBOT CONNECTED] ${config.username}`
+                "[RAW CHILDBOT]",
+                msg
             );
 
-            socket.send(JSON.stringify({
-                handler: "login",
-                username: config.username,
-                password: config.password,
-                id: generatePacketID()
-            }));
+            // =====================
+            // LOGIN SUCCESS
+            // =====================
 
-        });
-
-        // =========================
-        // MESSAGE
-        // =========================
-
-        socket.on("message", async(data) => {
-
-            try {
-
-                const msg = JSON.parse(data);
+            if (
+                msg.handler === "login_event" &&
+                msg.type === "success"
+            ) {
 
                 console.log(
-                    "[CHILDBOT RAW]",
-                    msg
+                    `[LOGIN SUCCESS] ${config.username}`
                 );
 
-                // LOGIN SUCCESS
-                if (
-                    msg.handler === "login_event" &&
-                    msg.type === "success"
-                ) {
-
-                    console.log(
-                        `[CHILDBOT LOGIN SUCCESS] ${config.username}`
-                    );
-
-                    socket.send(JSON.stringify({
-                        handler: "room_join",
-                        name: config.room,
-                        id: generatePacketID()
-                    }));
-
-                }
-
-                // LOGIN FAILED
-                if (
-                    msg.handler === "login_event" &&
-                    (
-                        msg.type === "failed" ||
-                        msg.type === "error"
-                    )
-                ) {
-
-                    console.log(
-                        `[CHILDBOT LOGIN FAILED] ${config.username}`
-                    );
-
-                }
-
-                // ROOM EVENT
-                if (
-                    msg.handler === "room_event"
-                ) {
-
-                    console.log(
-                        `[ROOM EVENT] ${msg.type}`
-                    );
-
-                }
-
-            } catch(err) {
+                socket.send(JSON.stringify({
+                    handler: "room_join",
+                    name: config.room,
+                    id: generatePacketID()
+                }));
 
                 console.log(
-                    "CHILDBOT MESSAGE ERROR:",
-                    err
+                    `[JOINING ROOM] ${config.room}`
+                );
+
+                // START QUIZ
+                if (config.quiz) {
+
+                    QuizSystem.startQuiz(
+                        socket,
+                        config.room
+                    );
+
+                }
+
+            }
+
+            // =====================
+            // LOGIN FAILED
+            // =====================
+
+            if (
+                msg.handler === "login_event" &&
+                (
+                    msg.type === "failed" ||
+                    msg.type === "error"
+                )
+            ) {
+
+                console.log(
+                    `[LOGIN FAILED] ${config.username}`
                 );
 
             }
 
-        });
+            // =====================
+            // ROOM EVENT
+            // =====================
 
-        // =========================
-        // ERROR
-        // =========================
+            if (
+                msg.handler === "room_event"
+            ) {
 
-        socket.on("error", (err) => {
+                await handleRoomEvent(
+                    socket,
+                    config,
+                    msg
+                );
+
+            }
+
+        } catch(err) {
 
             console.log(
-                "CHILDBOT SOCKET ERROR:",
+                "[CHILDBOT ERROR]",
                 err
             );
 
-        });
+        }
 
-        // =========================
-        // CLOSE
-        // =========================
+    });
 
-        socket.on("close", () => {
+    // =========================
+    // ERROR
+    // =========================
 
-            console.log(
-                `[CHILDBOT CLOSED] ${config.username}`
-            );
-
-        });
-
-    } catch(err) {
+    socket.on("error", (err) => {
 
         console.log(
-            "CHILDBOT CRASH:",
+            "[SOCKET ERROR]",
             err
+        );
+
+    });
+
+    // =========================
+    // CLOSE
+    // =========================
+
+    socket.on("close", () => {
+
+        console.log(
+            `[CLOSED] ${config.username}`
+        );
+
+    });
+
+}
+
+// ======================================
+// ROOM EVENTS
+// ======================================
+
+async function handleRoomEvent(
+    socket,
+    config,
+    msg
+) {
+
+    const type = msg.type;
+
+    // ==================================
+    // USER JOINED
+    // ==================================
+
+    if (
+        type === "user_joined"
+    ) {
+
+        if (config.welcome === false)
+            return;
+
+        const welcomes = [
+
+            `Welcome ${msg.username}`,
+
+            `Hello ${msg.username}`,
+
+            `Enjoy your stay ${msg.username}`,
+
+            `Nice to see you ${msg.username}`
+
+        ];
+
+        const random = welcomes[
+            Math.floor(
+                Math.random() * welcomes.length
+            )
+        ];
+
+        sendRoomMessage(
+            socket,
+            config.room,
+            random
+        );
+
+    }
+
+    // ==================================
+    // ROOM TEXT
+    // ==================================
+
+    if (
+        type === "text" ||
+        type === "message" ||
+        type === "chat"
+    ) {
+
+        if (!msg.body) return;
+
+        const body =
+            msg.body.toLowerCase().trim();
+
+        const from = msg.from;
+
+        console.log(
+            `[ROOM MESSAGE] ${from}: ${body}`
+        );
+
+        // ==========================
+        // HELP
+        // ==========================
+
+        if (body === "help") {
+
+            sendRoomMessage(
+                socket,
+                config.room,
+
+`BOT COMMANDS
+
+help
+myscore
+
+@welcome on
+@welcome off
+
+@quiz on
+@quiz off
+
+@addmaster username
+@removemaster username`
+            );
+
+        }
+
+        // ==========================
+        // CHECK MASTER
+        // ==========================
+
+        const isMainMaster =
+            from === config.owner;
+
+        const isRoomMaster =
+            config.roomMasters.includes(from);
+
+        const isMaster =
+            isMainMaster || isRoomMaster;
+
+        // ==========================
+        // ADD ROOM MASTER
+        // ==========================
+
+        if (
+            body.startsWith("@addmaster ")
+        ) {
+
+            if (!isMaster) {
+
+                return sendRoomMessage(
+                    socket,
+                    config.room,
+                    "Only masters can add master."
+                );
+
+            }
+
+            const target =
+                body.replace(
+                    "@addmaster ",
+                    ""
+                ).trim();
+
+            if (
+                !config.roomMasters.includes(target)
+            ) {
+
+                config.roomMasters.push(target);
+
+                saveBotConfig(config);
+
+                sendRoomMessage(
+                    socket,
+                    config.room,
+                    `${target} added as room master.`
+                );
+
+            }
+
+        }
+
+        // ==========================
+        // REMOVE ROOM MASTER
+        // ==========================
+
+        if (
+            body.startsWith("@removemaster ")
+        ) {
+
+            if (!isMaster) {
+
+                return sendRoomMessage(
+                    socket,
+                    config.room,
+                    "Only masters can remove master."
+                );
+
+            }
+
+            const target =
+                body.replace(
+                    "@removemaster ",
+                    ""
+                ).trim();
+
+            // CANNOT REMOVE MAIN MASTER
+            if (target === config.owner) {
+
+                return sendRoomMessage(
+                    socket,
+                    config.room,
+                    "Cannot remove main master."
+                );
+
+            }
+
+            config.roomMasters =
+                config.roomMasters.filter(
+                    x => x !== target
+                );
+
+            saveBotConfig(config);
+
+            sendRoomMessage(
+                socket,
+                config.room,
+                `${target} removed from masters.`
+            );
+
+        }
+
+        // ==========================
+        // WELCOME ON
+        // ==========================
+
+        if (body === "@welcome on") {
+
+            if (!isMaster)
+                return;
+
+            config.welcome = true;
+
+            saveBotConfig(config);
+
+            sendRoomMessage(
+                socket,
+                config.room,
+                "Welcome enabled."
+            );
+
+        }
+
+        // ==========================
+        // WELCOME OFF
+        // ==========================
+
+        if (body === "@welcome off") {
+
+            if (!isMaster)
+                return;
+
+            config.welcome = false;
+
+            saveBotConfig(config);
+
+            sendRoomMessage(
+                socket,
+                config.room,
+                "Welcome disabled."
+            );
+
+        }
+
+        // ==========================
+        // QUIZ ON
+        // ==========================
+
+        if (body === "@quiz on") {
+
+            if (!isMaster)
+                return;
+
+            config.quiz = true;
+
+            saveBotConfig(config);
+
+            QuizSystem.startQuiz(
+                socket,
+                config.room
+            );
+
+            sendRoomMessage(
+                socket,
+                config.room,
+                "Quiz enabled."
+            );
+
+        }
+
+        // ==========================
+        // QUIZ OFF
+        // ==========================
+
+        if (body === "@quiz off") {
+
+            if (!isMaster)
+                return;
+
+            config.quiz = false;
+
+            saveBotConfig(config);
+
+            sendRoomMessage(
+                socket,
+                config.room,
+                "Quiz disabled."
+            );
+
+        }
+
+        // ==========================
+        // HANDLE ANSWER
+        // ==========================
+
+        if (config.quiz !== false) {
+
+            QuizSystem.handleAnswer(
+                socket,
+                config.room,
+                from,
+                body
+            );
+
+        }
+
+        // ==========================
+        // MYSCORE
+        // ==========================
+
+        if (body === "myscore") {
+
+            const scores = loadJSON(
+                "./storage/scores.json",
+                {}
+            );
+
+            if (scores[from]) {
+
+                const user =
+                    scores[from];
+
+                sendRoomMessage(
+                    socket,
+                    config.room,
+
+`${from}
+
+Score: ${user.score}
+
+Best Speed:
+${user.bestTime || 0}s`
+                );
+
+            } else {
+
+                sendRoomMessage(
+                    socket,
+                    config.room,
+                    `${from} has no score yet.`
+                );
+
+            }
+
+        }
+
+    }
+
+}
+
+// ======================================
+// SAVE BOT CONFIG
+// ======================================
+
+function saveBotConfig(config) {
+
+    let bots = loadJSON(
+        "./storage/bots.json",
+        []
+    );
+
+    const index = bots.findIndex(
+        x => x.room === config.room
+    );
+
+    if (index !== -1) {
+
+        bots[index] = config;
+
+        saveJSON(
+            "./storage/bots.json",
+            bots
         );
 
     }
 
 }
+
+// ======================================
+// SEND ROOM MESSAGE
+// ======================================
+
+function sendRoomMessage(
+    socket,
+    room,
+    body
+) {
+
+    socket.send(JSON.stringify({
+
+        handler: "room_message",
+
+        type: "text",
+
+        room,
+
+        body,
+
+        url: "",
+
+        length: "0",
+
+        id: generatePacketID()
+
+    }));
+
+}
+
+// ======================================
 
 module.exports = {
     start
