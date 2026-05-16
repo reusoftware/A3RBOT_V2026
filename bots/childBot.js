@@ -210,9 +210,7 @@ function start(config) {
                                 "Im a Bot and ready to work!"
                             );
   }, 8000);
-                            // AUTO START QUIZ
-                            if (config.quiz) {
-
+                          
                                 setTimeout(() => {
 
                                     QuizSystem.startQuiz(
@@ -222,7 +220,7 @@ function start(config) {
 
                                 }, 10000);
 
-                            }
+                          
 
                             resolve({
                                 success: true,
