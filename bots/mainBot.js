@@ -3,13 +3,13 @@ const ChildBot = require("./childBot");
 const { loadJSON, saveJSON } = require("./storage");
 
 let socket;
-let CHILD_BOTS = {};
+let CHILD = {};
 
 function packet() {
     return "MAIN-" + Date.now();
 }
 
-// ================= UI UPDATE FIX =================
+// ================= PANEL =================
 function updatePanel() {
 
     if (!global.uiSocket || global.uiSocket.readyState !== 1) return;
@@ -43,13 +43,13 @@ function start(username, password) {
 
         });
 
-        socket.on("message", async (data) => {
+        socket.on("message", (data) => {
 
-            let msg = JSON.parse(data);
+            const msg = JSON.parse(data);
 
             if (msg.handler === "login_event" && msg.type === "success") {
                 resolve({ success: true });
-                loadSavedBots();
+                loadBots();
             }
 
             if (msg.handler === "chat_message") {
@@ -58,9 +58,7 @@ function start(username, password) {
 
         });
 
-        socket.on("close", () => {
-            setTimeout(() => start(username, password), 5000);
-        });
+        setInterval(updatePanel, 5000);
 
     });
 }
@@ -70,41 +68,38 @@ async function createBot(owner, cmd) {
 
     const [room, user, pass] = cmd.substring(2).split("#");
 
-    if (CHILD_BOTS[room]) {
-        return send(owner, "Bot already exists in room");
+    if (CHILD[room]) {
+        return send(owner, "Bot already exists");
     }
 
-    const result = await ChildBot.start({
+    const res = await ChildBot.start({
         room,
         username: user,
         password: pass,
         owner
     });
 
-    if (!result.success) {
-        return send(owner, "Bot failed");
-    }
+    if (!res.success) return send(owner, "Failed");
 
-    CHILD_BOTS[room] = result.socket;
+    CHILD[room] = res.socket;
 
     updatePanel();
 
-    send(owner, "Bot created!");
+    send(owner, "Bot created");
 }
 
 // ================= LOAD =================
-async function loadSavedBots() {
+async function loadBots() {
 
     const bots = loadJSON("./storage/bots.json", []);
 
-    for (const bot of bots) {
+    for (const b of bots) {
+        if (CHILD[b.room]) continue;
 
-        if (CHILD_BOTS[bot.room]) continue;
+        const res = await ChildBot.start(b);
 
-        const result = await ChildBot.start(bot);
-
-        if (result.success) {
-            CHILD_BOTS[bot.room] = result.socket;
+        if (res.success) {
+            CHILD[b.room] = res.socket;
         }
     }
 
@@ -120,7 +115,6 @@ function handlePM(msg) {
     if (body.startsWith("j/")) {
         createBot(from, body);
     }
-
 }
 
 function send(to, body) {
