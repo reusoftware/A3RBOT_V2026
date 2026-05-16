@@ -85,12 +85,12 @@ async function createBot(owner, body) {
         quiz: false
     };
 
-    send(owner, "Creating bot...");
+    send(owner, "Creating your bot...");
 
     const result = await ChildBot.start(config);
 
     if (!result.success)
-        return send(owner, "Bot failed to join/login");
+        return send(owner, "Bot failed to join/Bot Succesfully Created.");
 
     ACTIVE_BOTS[room] = result.bot;
 
