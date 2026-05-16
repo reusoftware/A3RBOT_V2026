@@ -31,7 +31,7 @@ function sendRoomMessage(
     try {
 
         if (!socket) return;
-
+///===
         if (socket.readyState !== 1)
             return;
 
