@@ -229,7 +229,7 @@ async function handlePrivateMessage(msg) {
         );
 
         // =========================
-        // HELP
+        // HELP===
         // =========================
 
         if (
