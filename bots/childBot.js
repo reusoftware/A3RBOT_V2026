@@ -57,14 +57,14 @@ function start(config) {
                 if (joined) return;
                 joined = true;
                 ready = true;
-   setTimeout(() => {
+
                 console.log("[CHILDBOT READY]", config.username);
 
                 global.CHILD_CONNECTED = global.CHILD_CONNECTED || {};
                 global.CHILD_CONNECTED[config.room] = {
                     room: config.room,
                     username: config.username
-                       }, 1500);
+                    
                 };
 
                 // IMPORTANT: delay bot messages (prevents kick)
@@ -102,7 +102,7 @@ function start(config) {
         });
 
         function sendRoomMessage(socket, room, body) {
-            if (!socket || socket.readyState !== 1) return;
+           /// if (!socket || socket.readyState !== 1) return;
 
             socket.send(JSON.stringify({
                 handler: "room_message",
