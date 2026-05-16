@@ -5,7 +5,7 @@ let timers = {};
 
 function startQuiz(socket, room) {
 
-    if (timers[room]) return;
+    stopQuiz(room); // IMPORTANT FIX
 
     sendQuestion(socket, room);
 
