@@ -236,9 +236,9 @@ ${q.answer}`
                     room
                 );
 
-            }, 5000);
+            }, 20000);
 
-        }, 5000);
+        },20000);
 
         return;
     }
@@ -248,7 +248,7 @@ ${q.answer}`
 
         askLoop(socket, room);
 
-    }, 5000);
+    }, 20000);
 
 }
 
@@ -359,7 +359,7 @@ ${scores[user].bestSpeed.toFixed(2)}s`
             room
         );
 
-    }, 5000);
+    }, 20000);
 
 }
 
