@@ -225,9 +225,9 @@ function start(config) {
                       ///   resolve({
                        ///      success: true,
                       ///      socket
-                      ///  });
+                      });
 
-                      }
+                   }
 
                     }, 4000);
 
