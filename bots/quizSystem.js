@@ -7,14 +7,18 @@ let active = {};
 let timers = {};
 
 function rand(min, max) {
+
     return Math.floor(
         Math.random() * (max - min + 1)
     ) + min;
+
 }
 
 function startQuiz(socket, room) {
 
     if (timers[room]) return;
+
+    console.log("[QUIZ START]", room);
 
     sendQuestion(socket, room);
 
@@ -28,6 +32,23 @@ function startQuiz(socket, room) {
         sendQuestion(socket, room);
 
     }, 30000);
+
+}
+
+function stopQuiz(room) {
+
+    if (timers[room]) {
+
+        clearInterval(timers[room]);
+
+        delete timers[room];
+
+    }
+
+    delete active[room];
+
+    console.log("[QUIZ STOP]", room);
+
 }
 
 function sendQuestion(socket, room) {
@@ -40,6 +61,7 @@ function sendQuestion(socket, room) {
         answer: String(a + b),
 
         locked: false
+
     };
 
     socket.send(JSON.stringify({
@@ -48,14 +70,20 @@ function sendQuestion(socket, room) {
 
         type: "text",
 
-        room,
+        id: "QUIZ-" + Date.now(),
 
-        body:
-        `🧠 QUIZ: ${a} + ${b} = ?`,
+        body: `🧠 QUIZ: ${a} + ${b} = ?`,
 
-        id: "QUIZ-" + Date.now()
+        room: room,
+
+        url: "",
+
+        length: "0"
 
     }));
+
+    console.log("[QUIZ SENT]", room);
+
 }
 
 function handleAnswer(
@@ -71,21 +99,23 @@ function handleAnswer(
 
     if (q.locked) return;
 
-    if (msg !== q.answer) return;
+    if (
+        String(msg).trim() !== q.answer
+    ) return;
 
     q.locked = true;
 
-    let scores =
-        loadJSON(
-            "./storage/scores.json",
-            {}
-        );
+    let scores = loadJSON(
+        "./storage/scores.json",
+        {}
+    );
 
     if (!scores[user]) {
 
         scores[user] = {
             score: 0
         };
+
     }
 
     scores[user].score += 1;
@@ -101,23 +131,35 @@ function handleAnswer(
 
         type: "text",
 
-        room,
+        id: "WIN-" + Date.now(),
 
         body:
-        `🏆 ${user} answered correctly!`,
+        `🏆 ${user} answered correctly!
+Total Score: ${scores[user].score}`,
 
-        id: "WIN-" + Date.now()
+        room: room,
+
+        url: "",
+
+        length: "0"
 
     }));
 
     setTimeout(() => {
 
-        sendQuestion(socket, room);
+        sendQuestion(
+            socket,
+            room
+        );
 
     }, 5000);
+
 }
 
 module.exports = {
+
     startQuiz,
+    stopQuiz,
     handleAnswer
+
 };
