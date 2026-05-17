@@ -14,32 +14,29 @@ function rand(min, max) {
 
 }
 
+// =====================================
+// START QUIZ
+// =====================================
+
 function startQuiz(socket, room) {
 
     if (timers[room]) return;
 
     console.log("[QUIZ START]", room);
 
-    sendQuestion(socket, room);
-
-    timers[room] = setInterval(() => {
-
-        if (!socket) return;
-
-        if (socket.readyState !== 1)
-            return;
-
-        sendQuestion(socket, room);
-
-    }, 30000);
+    createQuestion(socket, room);
 
 }
+
+// =====================================
+// STOP QUIZ
+// =====================================
 
 function stopQuiz(room) {
 
     if (timers[room]) {
 
-        clearInterval(timers[room]);
+        clearTimeout(timers[room]);
 
         delete timers[room];
 
@@ -51,40 +48,127 @@ function stopQuiz(room) {
 
 }
 
-function sendQuestion(socket, room) {
+// =====================================
+// CREATE QUESTION
+// =====================================
+
+function createQuestion(socket, room) {
+
+    if (!socket) return;
+
+    if (socket.readyState !== 1)
+        return;
 
     const a = rand(1, 20);
     const b = rand(1, 20);
 
+    const answer = a + b;
+
     active[room] = {
 
-        answer: String(a + b),
+        answer: String(answer),
 
-        locked: false
+        question: `${a} + ${b}`,
+
+        time: Date.now(),
+
+        locked: false,
+
+        repeat: 0
 
     };
 
-    socket.send(JSON.stringify({
-
-        handler: "room_message",
-
-        type: "text",
-
-        id: "QUIZ-" + Date.now(),
-
-        body: `🧠 QUIZ: ${a} + ${b} = ?`,
-
-        room: room,
-
-        url: "",
-
-        length: "0"
-
-    }));
-
-    console.log("[QUIZ SENT]", room);
+    askLoop(socket, room);
 
 }
+
+// =====================================
+// ASK LOOP
+// =====================================
+
+function askLoop(socket, room) {
+
+    const q = active[room];
+
+    if (!q) return;
+
+    if (q.locked) return;
+
+    q.repeat++;
+
+    const styles = [
+
+        `❓ Question #${q.repeat}\n${q.question} = ?`,
+
+        `🧠 Please answer:\n${q.question} = ?`,
+
+        `⚡ Fast answer wins!\n${q.question} = ?`,
+
+        `🔥 Nobody knows?\n${q.question} = ?`,
+
+        `🎯 Last chance!\n${q.question} = ?`
+
+    ];
+
+    const text =
+        styles[
+            Math.min(
+                q.repeat - 1,
+                styles.length - 1
+            )
+        ];
+
+    sendRoom(socket, room, text);
+
+    // AFTER 5 POSTS
+    if (q.repeat >= 5) {
+
+        timers[room] = setTimeout(() => {
+
+            if (!active[room]) return;
+
+            if (!active[room].locked) {
+
+                sendRoom(
+                    socket,
+                    room,
+
+`⏰ Time's up!
+
+Correct Answer:
+${q.answer}`
+                );
+
+            }
+
+            delete active[room];
+
+            setTimeout(() => {
+
+                createQuestion(
+                    socket,
+                    room
+                );
+
+            }, 5000);
+
+        }, 5000);
+
+        return;
+    }
+
+    // NEXT REPEAT
+    timers[room] = setTimeout(() => {
+
+        askLoop(socket, room);
+
+    }, 5000);
+
+}
+
+// =====================================
+// HANDLE ANSWER
+// =====================================
 
 function handleAnswer(
     socket,
@@ -105,6 +189,13 @@ function handleAnswer(
 
     q.locked = true;
 
+    clearTimeout(timers[room]);
+
+    const speed =
+        (
+            Date.now() - q.time
+        ) / 1000;
+
     let scores = loadJSON(
         "./storage/scores.json",
         {}
@@ -113,46 +204,125 @@ function handleAnswer(
     if (!scores[user]) {
 
         scores[user] = {
-            score: 0
+
+            score: 0,
+
+            bestSpeed: 9999
+
         };
 
     }
 
-    scores[user].score += 1;
+    // BONUS SCORE
+    let gain = 10;
+
+    if (q.repeat === 1)
+        gain = 50;
+
+    else if (q.repeat === 2)
+        gain = 40;
+
+    else if (q.repeat === 3)
+        gain = 30;
+
+    else if (q.repeat === 4)
+        gain = 20;
+
+    else gain = 10;
+
+    scores[user].score += gain;
+
+    // BEST SPEED
+    if (
+        speed < scores[user].bestSpeed
+    ) {
+
+        scores[user].bestSpeed =
+            speed;
+
+    }
 
     saveJSON(
         "./storage/scores.json",
         scores
     );
 
-    socket.send(JSON.stringify({
+    sendRoom(
+        socket,
+        room,
 
-        handler: "room_message",
+`🏆 ${user} answered correctly!
 
-        type: "text",
+⚡ Speed:
+${speed.toFixed(2)}s
 
-        id: "WIN-" + Date.now(),
+➕ Added Score:
+${gain}
 
-        body:
-        `🏆 ${user} answered correctly!
-Total Score: ${scores[user].score}`,
+🏅 Total Score:
+${scores[user].score}
 
-        room: room,
+🔥 Best Speed:
+${scores[user].bestSpeed.toFixed(2)}s`
+    );
 
-        url: "",
-
-        length: "0"
-
-    }));
+    delete active[room];
 
     setTimeout(() => {
 
-        sendQuestion(
+        createQuestion(
             socket,
             room
         );
 
     }, 5000);
+
+}
+
+// =====================================
+// SEND ROOM
+// =====================================
+
+function sendRoom(
+    socket,
+    room,
+    body
+) {
+
+    try {
+
+        if (!socket) return;
+
+        if (socket.readyState !== 1)
+            return;
+
+        socket.send(JSON.stringify({
+
+            handler: "room_message",
+
+            type: "text",
+
+            id:
+            "QUIZ-" + Date.now(),
+
+            body: body,
+
+            room: room,
+
+            url: "",
+
+            length: "0"
+
+        }));
+
+    } catch(err) {
+
+        console.log(
+            "[QUIZ SEND ERROR]",
+            err.message
+        );
+
+    }
 
 }
 
