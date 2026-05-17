@@ -203,13 +203,13 @@ function start(config) {
                                 "[BOT READY]",
                                 config.username
                             );
-   setTimeout(() => {
+///   setTimeout(() => {
                             sendRoomMessage(
                                 socket,
                                 config.room,
                                 "Im a Bot and ready to work!"
                             );
-  }, 8000);
+///  }, 8000);
                           
                             //    setTimeout(() => {
 
