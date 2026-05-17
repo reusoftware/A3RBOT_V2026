@@ -6,6 +6,39 @@ const {
 let active = {};
 let timers = {};
 
+const words = [
+
+    {
+        question: "Capital of Japan?",
+        answer: "tokyo"
+    },
+
+    {
+        question: "2 colors of PH flag?",
+        answer: "red blue"
+    },
+
+    {
+        question: "Largest planet?",
+        answer: "jupiter"
+    },
+
+    {
+        question: "Fastest land animal?",
+        answer: "cheetah"
+    },
+
+    {
+        question: "What planet do we live on?",
+        answer: "earth"
+    }
+
+];
+
+// =====================================
+// RANDOM NUMBER
+// =====================================
+
 function rand(min, max) {
 
     return Math.floor(
@@ -44,8 +77,6 @@ function stopQuiz(room) {
 
     delete active[room];
 
-    console.log("[QUIZ STOP]", room);
-
 }
 
 // =====================================
@@ -59,22 +90,70 @@ function createQuestion(socket, room) {
     if (socket.readyState !== 1)
         return;
 
-    const a = rand(1, 20);
-    const b = rand(1, 20);
+    let question = "";
+    let answer = "";
 
-    const answer = a + b;
+    const mode = rand(1, 4);
+
+    // ADDITION
+    if (mode === 1) {
+
+        const a = rand(1, 30);
+        const b = rand(1, 30);
+
+        question = `${a} + ${b}`;
+        answer = String(a + b);
+
+    }
+
+    // SUBTRACT
+    else if (mode === 2) {
+
+        const a = rand(10, 50);
+        const b = rand(1, 10);
+
+        question = `${a} - ${b}`;
+        answer = String(a - b);
+
+    }
+
+    // MULTIPLY
+    else if (mode === 3) {
+
+        const a = rand(1, 12);
+        const b = rand(1, 12);
+
+        question = `${a} × ${b}`;
+        answer = String(a * b);
+
+    }
+
+    // WORD QUESTION
+    else {
+
+        const pick =
+            words[
+                rand(0, words.length - 1)
+            ];
+
+        question = pick.question;
+        answer = pick.answer;
+
+    }
 
     active[room] = {
 
-        answer: String(answer),
+        question,
 
-        question: `${a} + ${b}`,
+        answer: String(answer)
+            .toLowerCase()
+            .trim(),
 
-        time: Date.now(),
+        repeat: 0,
 
         locked: false,
 
-        repeat: 0
+        time: Date.now()
 
     };
 
@@ -98,36 +177,43 @@ function askLoop(socket, room) {
 
     const styles = [
 
-        `❓ Question #${q.repeat}\n${q.question} = ?`,
+`❓ Question #1
 
-        `🧠 Please answer:\n${q.question} = ?`,
+${q.question}`,
 
-        `⚡ Fast answer wins!\n${q.question} = ?`,
+`🧠 Please answer:
 
-        `🔥 Nobody knows?\n${q.question} = ?`,
+${q.question}`,
 
-        `🎯 Last chance!\n${q.question} = ?`
+`⚡ Fast answer wins!
+
+${q.question}`,
+
+`🔥 Nobody knows?
+
+${q.question}`,
+
+`🎯 Last chance!
+
+${q.question}`
 
     ];
 
-    const text =
-        styles[
-            Math.min(
-                q.repeat - 1,
-                styles.length - 1
-            )
-        ];
+    sendRoom(
+        socket,
+        room,
+        styles[q.repeat - 1]
+    );
 
-    sendRoom(socket, room, text);
-
-    // AFTER 5 POSTS
+    // LAST REPEAT
     if (q.repeat >= 5) {
 
         timers[room] = setTimeout(() => {
 
-            if (!active[room]) return;
-
-            if (!active[room].locked) {
+            if (
+                active[room] &&
+                !active[room].locked
+            ) {
 
                 sendRoom(
                     socket,
@@ -183,9 +269,13 @@ function handleAnswer(
 
     if (q.locked) return;
 
-    if (
-        String(msg).trim() !== q.answer
-    ) return;
+    const text =
+        String(msg)
+        .toLowerCase()
+        .trim();
+
+    if (text !== q.answer)
+        return;
 
     q.locked = true;
 
@@ -213,28 +303,22 @@ function handleAnswer(
 
     }
 
-    // BONUS SCORE
-    let gain = 10;
+    // RANDOM BONUS
+    let gain = rand(5, 50);
 
-    if (q.repeat === 1)
-        gain = 50;
+    // SPEED BONUS
+    if (speed <= 3)
+        gain += 20;
 
-    else if (q.repeat === 2)
-        gain = 40;
-
-    else if (q.repeat === 3)
-        gain = 30;
-
-    else if (q.repeat === 4)
-        gain = 20;
-
-    else gain = 10;
+    else if (speed <= 5)
+        gain += 10;
 
     scores[user].score += gain;
 
     // BEST SPEED
     if (
-        speed < scores[user].bestSpeed
+        speed <
+        scores[user].bestSpeed
     ) {
 
         scores[user].bestSpeed =
@@ -280,6 +364,73 @@ ${scores[user].bestSpeed.toFixed(2)}s`
 }
 
 // =====================================
+// TOP 10
+// =====================================
+
+function getTop10() {
+
+    const scores = loadJSON(
+        "./storage/scores.json",
+        {}
+    );
+
+    const arr =
+        Object.entries(scores);
+
+    arr.sort(
+        (a, b) =>
+        b[1].score - a[1].score
+    );
+
+    let text =
+`🏆 TOP 10 PLAYERS 🏆`;
+
+    arr.slice(0, 10)
+    .forEach((x, i) => {
+
+        text +=
+
+`\n\n${i + 1}. ${x[0]}
+Score: ${x[1].score}
+Best: ${x[1].bestSpeed.toFixed(2)}s`;
+
+    });
+
+    return text;
+
+}
+
+// =====================================
+// MYSCORE
+// =====================================
+
+function getMyScore(user) {
+
+    const scores = loadJSON(
+        "./storage/scores.json",
+        {}
+    );
+
+    if (!scores[user]) {
+
+        return
+        `${user} has no score yet.`;
+
+    }
+
+    return
+
+`🏅 ${user}
+
+Score:
+${scores[user].score}
+
+Best Speed:
+${scores[user].bestSpeed.toFixed(2)}s`;
+
+}
+
+// =====================================
 // SEND ROOM
 // =====================================
 
@@ -305,9 +456,9 @@ function sendRoom(
             id:
             "QUIZ-" + Date.now(),
 
-            body: body,
+            body,
 
-            room: room,
+            room,
 
             url: "",
 
@@ -330,6 +481,8 @@ module.exports = {
 
     startQuiz,
     stopQuiz,
-    handleAnswer
+    handleAnswer,
+    getTop10,
+    getMyScore
 
 };
