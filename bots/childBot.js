@@ -173,66 +173,48 @@ function start(config) {
             ) {
 
                 // SUCCESS
-                if (msg.type === "success") {
+          if (msg.type === "success") {
 
-                    console.log(
-                        "[LOGIN SUCCESS]",
-                        config.username
-                    );
+    console.log("[LOGIN SUCCESS]", config.username);
 
-                    socket.send(JSON.stringify({
+    socket.send(JSON.stringify({
+        handler: "room_join",
+        name: config.room,
+        id: packet()
+    }));
+}
 
-                        handler: "room_join",
+                 if (msg.type === "you_joined") {
 
-                        name: config.room,
+    console.log("[ROOM JOINED]", config.room);
 
-                        id: packet()
+    setTimeout(() => {
 
-                    }));
+        sendRoomMessage(
+            socket,
+            config.room,
+            "Im a Bot and ready to work!"
+        );
 
-                    // IMPORTANT FIX:
-                
+        if (config.quiz) {
 
-                    setTimeout(() => {
+            setTimeout(() => {
+                QuizSystem.startQuiz(socket, config.room);
+            }, 5000);
+        }
 
-                        if (!resolved) {
+    }, 5000);
 
-                            resolved = true;
+    if (!resolved) {
 
-                            console.log(
-                                "[BOT READY]",
-                                config.username
-                            );
-///   setTimeout(() => {
-                            sendRoomMessage(
-                                socket,
-                                config.room,
-                                "Im a Bot and ready to work!"
-                            );
-///  }, 8000);
-                          
-                            //    setTimeout(() => {
+        resolved = true;
 
-                             //       QuizSystem.startQuiz(
-                              //          socket,
-                             //           config.room
-                                    );
-
-                           //     }, 10000);
-
-                          
-
-                      ///   resolve({
-                       ///      success: true,
-                      ///      socket
-                      });
-
-                   }
-
-                    }, 4000);
-
-                }
-
+        resolve({
+            success: true,
+            socket
+        });
+    }
+}
                 // FAILED
                 if (
                     msg.type === "failed" ||
