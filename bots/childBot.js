@@ -248,7 +248,7 @@ function start(config) {
                             "Im a Bot and ready to work!"
                         );
 
-                    }, 3000);
+                    }, 10000);
 
                     // AUTO QUIZ
                     if (config.quiz) {
@@ -260,7 +260,7 @@ function start(config) {
                                 config.room
                             );
 
-                        }, 5000);
+                        }, 20000);
 
                     }
 
