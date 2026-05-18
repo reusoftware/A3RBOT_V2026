@@ -522,6 +522,14 @@ function getTop10() {
     let text =
 `🏆 TOP 10 PLAYERS 🏆`;
 
+    if (arr.length === 0) {
+
+        return `🏆 TOP 10 PLAYERS 🏆
+
+No players yet.`;
+
+    }
+
     arr
     .slice(0, 10)
     .forEach((x, i) => {
@@ -529,8 +537,10 @@ function getTop10() {
         text +=
 
 `\n\n${i + 1}. ${x[0]}
-Score: ${x[1].score}
-Best Speed:
+⭐ Score:
+${x[1].score}
+
+⚡ Best Speed:
 ${x[1].bestSpeed.toFixed(2)}s`;
 
     });
@@ -553,25 +563,24 @@ function getMyScore(user) {
 
     if (!scores[user]) {
 
-        return
-`${user} has no score yet.`;
+        return `${user} has no score yet.`;
 
     }
 
-    return
+    return `🏅 PLAYER SCORE
 
-`🏅 ${user}
+👤 Username:
+${user}
 
-Score:
+⭐ Total Score:
 ${scores[user].score}
 
-Best Speed:
+⚡ Best Speed:
 ${scores[user]
 .bestSpeed
 .toFixed(2)}s`;
 
 }
-
 // =====================================
 // SEND ROOM
 // =====================================
