@@ -404,22 +404,22 @@ async function handleRoomEvent(
 
 help
 myscore
-masters
+maslist
 
-@quiz on
-@quiz off
++quiz
+-quiz
 
-@welcome on
-@welcome off
++wc
+-wc
 
-@addmaster username
-@removemaster username`
+mas+username
+mas-username`
         );
 
     }
 
     // MASTER LIST
-    if (body === "masters") {
+    if (body === "maslist") {
 
         return sendRoomMessage(
             socket,
@@ -434,13 +434,13 @@ masters
     }
 
     // ADD MASTER
-    if (body.startsWith("@addmaster ")) {
+    if (body.startsWith("mas+")) {
 
         if (!isMaster) return;
 
         const target =
             body.replace(
-                "@addmaster ",
+                "mas+",
                 ""
             ).trim();
 
@@ -457,19 +457,19 @@ masters
         return sendRoomMessage(
             socket,
             config.room,
-            `${target} added as master.`
+            `${target} added as Room master.`
         );
 
     }
 
     // REMOVE MASTER
-    if (body.startsWith("@removemaster ")) {
+    if (body.startsWith("mas-")) {
 
         if (!isMaster) return;
 
         const target =
             body.replace(
-                "@removemaster ",
+                "mas-",
                 ""
             ).trim();
 
@@ -489,7 +489,7 @@ masters
     }
 
     // QUIZ ON
-    if (body === "@quiz on") {
+    if (body === "+quiz") {
 
         if (!isMaster) return;
 
@@ -511,7 +511,7 @@ masters
     }
 
     // QUIZ OFF
-    if (body === "@quiz off") {
+    if (body === "-quiz") {
 
         if (!isMaster) return;
 
@@ -532,7 +532,7 @@ masters
     }
 
     // WELCOME ON
-    if (body === "@welcome on") {
+    if (body === "+wc") {
 
         if (!isMaster) return;
 
@@ -549,7 +549,7 @@ masters
     }
 
     // WELCOME OFF
-    if (body === "@welcome off") {
+    if (body === "-wc") {
 
         if (!isMaster) return;
 
