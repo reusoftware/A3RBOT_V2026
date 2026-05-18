@@ -408,8 +408,8 @@ async function handleRoomEvent(
 
 help
 myscore
-top10
-roomtop
+top
+rtop
 maslist
 
 +quiz
@@ -633,7 +633,7 @@ ${config.roomMasters.join("\n")}`
     // GLOBAL TOP 10
     // =====================================
 
-    if (body === "top10") {
+    if (body === "top") {
 
         return sendRoomMessage(
             socket,
@@ -647,7 +647,7 @@ ${config.roomMasters.join("\n")}`
     // ROOM TOP
     // =====================================
 
-    if (body === "roomtop") {
+    if (body === "rtop") {
 
         return sendRoomMessage(
             socket,
