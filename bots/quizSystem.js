@@ -283,11 +283,11 @@ function askLoop(
 
     const styles = [
 
-`❓ QUIZ QUESTION
+`❓ Please Answer this😅!
 
 ${q.question}`,
 
-`🧠 THINK FAST
+`🧠 NoBody Know?😅!
 
 ${q.question}`,
 
@@ -295,11 +295,11 @@ ${q.question}`,
 
 ${q.question}`,
 
-`🔥 LAST CHANCE
+`🔥 already given up yet 🥲😋
 
 ${q.question}`,
 
-`⏰ FINAL TRY
+`⏰ Are you confuse 🤪
 
 ${q.question}`
 
