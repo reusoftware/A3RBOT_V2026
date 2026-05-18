@@ -368,7 +368,7 @@ async function handleRoomEvent(
         return;
     }
 
-    // ROOM TEXT
+    // ONLY TEXT MESSAGE
     if (!msg.body) return;
 
     const body =
@@ -378,7 +378,8 @@ async function handleRoomEvent(
 
     const from =
         msg.from ||
-        msg.username;
+        msg.username ||
+        "Unknown";
 
     console.log(
         `[ROOM] ${from}: ${body}`
@@ -393,17 +394,22 @@ async function handleRoomEvent(
     const isMaster =
         isMainMaster || isRoomMaster;
 
+    // =====================================
     // HELP
+    // =====================================
+
     if (body === "help") {
 
         return sendRoomMessage(
             socket,
             config.room,
 
-`COMMANDS
+`📖 COMMANDS
 
 help
 myscore
+top10
+roomtop
 maslist
 
 +quiz
@@ -418,7 +424,10 @@ mas-username`
 
     }
 
+    // =====================================
     // MASTER LIST
+    // =====================================
+
     if (body === "maslist") {
 
         return sendRoomMessage(
@@ -427,13 +436,18 @@ mas-username`
 
             config.roomMasters.length === 0
                 ? "No room masters."
-                : config.roomMasters.join(", ")
+                : `👑 ROOM MASTERS
+
+${config.roomMasters.join("\n")}`
 
         );
 
     }
 
+    // =====================================
     // ADD MASTER
+    // =====================================
+
     if (body.startsWith("mas+")) {
 
         if (!isMaster) return;
@@ -443,6 +457,9 @@ mas-username`
                 "mas+",
                 ""
             ).trim();
+
+        if (!target)
+            return;
 
         if (
             !config.roomMasters.includes(target)
@@ -457,12 +474,15 @@ mas-username`
         return sendRoomMessage(
             socket,
             config.room,
-            `${target} added as Room master.`
+            `${target} added as Room Master.`
         );
 
     }
 
+    // =====================================
     // REMOVE MASTER
+    // =====================================
+
     if (body.startsWith("mas-")) {
 
         if (!isMaster) return;
@@ -488,7 +508,10 @@ mas-username`
 
     }
 
+    // =====================================
     // QUIZ ON
+    // =====================================
+
     if (body === "+quiz") {
 
         if (!isMaster) return;
@@ -505,12 +528,15 @@ mas-username`
         return sendRoomMessage(
             socket,
             config.room,
-            "Quiz enabled."
+            "✅ Quiz enabled."
         );
 
     }
 
+    // =====================================
     // QUIZ OFF
+    // =====================================
+
     if (body === "-quiz") {
 
         if (!isMaster) return;
@@ -526,12 +552,15 @@ mas-username`
         return sendRoomMessage(
             socket,
             config.room,
-            "Quiz disabled."
+            "❌ Quiz disabled."
         );
 
     }
 
+    // =====================================
     // WELCOME ON
+    // =====================================
+
     if (body === "+wc") {
 
         if (!isMaster) return;
@@ -543,12 +572,15 @@ mas-username`
         return sendRoomMessage(
             socket,
             config.room,
-            "Welcome enabled."
+            "✅ Welcome enabled."
         );
 
     }
 
+    // =====================================
     // WELCOME OFF
+    // =====================================
+
     if (body === "-wc") {
 
         if (!isMaster) return;
@@ -560,12 +592,15 @@ mas-username`
         return sendRoomMessage(
             socket,
             config.room,
-            "Welcome disabled."
+            "❌ Welcome disabled."
         );
 
     }
 
-    // QUIZ ANSWER
+    // =====================================
+    // HANDLE QUIZ ANSWER
+    // =====================================
+
     if (config.quiz) {
 
         QuizSystem.handleAnswer(
@@ -577,31 +612,49 @@ mas-username`
 
     }
 
-    // SCORE
+    // =====================================
+    // MY SCORE
+    // =====================================
+
     if (body === "myscore") {
-
-        const scores = loadJSON(
-            "./storage/scores.json",
-            {}
-        );
-
-        if (!scores[from]) {
-
-            return sendRoomMessage(
-                socket,
-                config.room,
-                "No score yet."
-            );
-
-        }
 
         return sendRoomMessage(
             socket,
             config.room,
+            QuizSystem.getMyScore(
+                from,
+                config.room
+            )
+        );
 
-`${from}
-Score: ${scores[from].score}`
+    }
 
+    // =====================================
+    // GLOBAL TOP 10
+    // =====================================
+
+    if (body === "top10") {
+
+        return sendRoomMessage(
+            socket,
+            config.room,
+            QuizSystem.getTop10()
+        );
+
+    }
+
+    // =====================================
+    // ROOM TOP
+    // =====================================
+
+    if (body === "roomtop") {
+
+        return sendRoomMessage(
+            socket,
+            config.room,
+            QuizSystem.getRoomTop(
+                config.room
+            )
         );
 
     }
