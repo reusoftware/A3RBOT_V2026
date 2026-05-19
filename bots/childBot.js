@@ -1,5 +1,6 @@
 const WebSocket = require("ws");
-
+const ytSearch = require("yt-search");
+const play = require("play-dl");
 const QuizSystem = require("./quizSystem");
 
 const {
@@ -62,7 +63,103 @@ function sendRoomMessage(socket, room, body) {
 
 }
 
+async function sendAudio(socket, room, audioUrl) {
+
+    try {
+
+        if (!socket) return;
+
+        if (socket.readyState !== 1)
+            return;
+
+        socket.send(JSON.stringify({
+
+            handler: "room_message",
+
+            type: "audio",
+
+            id: packet(),
+
+            body: "",
+
+            room: room,
+
+            url: audioUrl,
+
+            length: "10000"
+
+        }));
+
+        console.log("[AUDIO SENT]");
+
+    } catch (err) {
+
+        console.log(
+            "[AUDIO ERROR]",
+            err.message
+        );
+
+    }
+
+}
+
 // =====================================
+// SEARCH SONG
+// =====================================
+async function searchSongAudio(query) {
+
+    try {
+
+        const result =
+            await ytSearch(query);
+
+        if (!result.videos.length)
+            return null;
+
+        const video =
+            result.videos[0];
+
+        const info =
+            await play.video_info(
+                video.url
+            );
+
+        const format =
+            info.format.find(
+                x =>
+                x.mimeType &&
+                x.mimeType.includes("audio")
+            );
+
+        if (!format)
+            return null;
+
+        return {
+
+            title: video.title,
+
+            url: format.url,
+
+            author:
+            video.author.name,
+
+            duration:
+            video.timestamp
+
+        };
+
+    } catch (err) {
+
+        console.log(
+            "[SONG ERROR]",
+            err.message
+        );
+
+        return null;
+
+    }
+
+}=========================
 // SAVE BOT CONFIG
 // =====================================
 
@@ -597,6 +694,76 @@ ${config.roomMasters.join("\n")}`
 
     }
 
+
+
+    
+// =====================================
+// SONG COMMAND
+// =====================================
+
+if (body.startsWith("song+")) {
+
+    const query =
+        msg.body
+        .substring(5)
+        .trim();
+
+    if (!query) {
+
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "⚠️ Enter song title."
+        );
+
+    }
+
+    sendRoomMessage(
+        socket,
+        config.room,
+        `🔍 Searching song:\n${query}`
+    );
+
+    const song =
+        await searchSongAudio(
+            query
+        );
+
+    if (!song) {
+
+        return sendRoomMessage(
+            socket,
+            config.room,
+            "❌ Song not found."
+        );
+
+    }
+
+    // SEND INFO
+    sendRoomMessage(
+        socket,
+        config.room,
+
+`🎵 SONG FOUND
+
+🎧 ${song.title}
+
+👤 ${song.author}
+
+⏱ ${song.duration}
+
+📤 Sending audio...`
+    );
+
+    // SEND AUDIO
+    await sendAudio(
+        socket,
+        config.room,
+        song.url
+    );
+
+    return;
+}
     // =====================================
     // HANDLE QUIZ ANSWER
     // =====================================
