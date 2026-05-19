@@ -99,10 +99,13 @@ async function searchSongAudio(query) {
 
         const video = result.videos[0];
 
+        // 🔥 GET STREAM (REAL AUDIO STREAM)
+        const stream = await play.stream(video.url);
+
         return {
 
             title: video.title,
-            url: video.url,
+            url: stream.url,   // ✅ THIS is direct stream
             author: video.author.name,
             duration: video.timestamp
 
@@ -664,34 +667,24 @@ if (body.startsWith("song+")) {
 
         const query = msg.body.substring(5).trim();
 
-        if (!query) {
-            return sendRoomMessage(socket, config.room, "⚠️ Enter song title.");
-        }
-
-        sendRoomMessage(socket, config.room, `🔍 Searching:\n${query}`);
-
         const song = await searchSongAudio(query);
 
         if (!song) {
-            return sendRoomMessage(socket, config.room, "❌ Song not found.");
+            return sendRoomMessage(socket, config.room, "❌ Song not found");
         }
 
         sendRoomMessage(socket, config.room,
 `🎵 ${song.title}
 👤 ${song.author}
-⏱ ${song.duration}
-📤 Sending...`);
-
-        // 🔥 SAFETY CHECK BEFORE SENDING AUDIO
-        if (!socket || socket.readyState !== 1) return;
+⏱ ${song.duration}`);
 
         await sendAudio(socket, config.room, song.url);
 
     } catch (err) {
 
-        console.log("[SONG COMMAND ERROR]", err.message);
+        console.log("[SONG ERROR]", err.message);
 
-        sendRoomMessage(socket, config.room, "⚠️ Song error occurred.");
+        sendRoomMessage(socket, config.room, "⚠️ Audio failed");
 
     }
 
