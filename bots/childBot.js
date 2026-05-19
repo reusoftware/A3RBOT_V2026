@@ -17,7 +17,45 @@ function packet() {
     );
 
 }
+function sendAdmin(socket, room, payload) {
 
+    try {
+
+        socket.send(JSON.stringify({
+
+            handler: "room_admin",
+            ...payload,
+            room,
+            id: packet()
+
+        }));
+
+    } catch (err) {
+        console.log("[ADMIN ERROR]", err.message);
+    }
+
+}
+
+// KICK
+function kick(socket, room, user) {
+
+    sendAdmin(socket, room, {
+        type: "kick",
+        t_username: user
+    });
+
+}
+
+// ROLE CHANGE
+function setRole(socket, room, user, role) {
+
+    sendAdmin(socket, room, {
+        type: "change_role",
+        t_username: user,
+        t_role: role
+    });
+
+}
 // =====================================
 // SEND ROOM MESSAGE
 // =====================================
@@ -406,15 +444,15 @@ async function handleRoomEvent(
     const type = msg.type;
 
     // USER JOINED
-    if (type === "user_joined") {
+if (type === "user_joined") {
 
-        if (!config.welcome)
-            return;
+    const username =
+        msg.username ||
+        msg.from ||
+        "User";
 
-        const username =
-            msg.username ||
-            msg.from ||
-            "User";
+    // welcome
+    if (config.welcome) {
 
         sendRoomMessage(
             socket,
@@ -422,8 +460,49 @@ async function handleRoomEvent(
             `Welcome ${username}`
         );
 
-        return;
     }
+
+    // AUTO MEMBER
+    if (config.autoMember) {
+
+        setTimeout(() => {
+
+            setRole(
+                socket,
+                config.room,
+                username,
+                "member"
+            );
+
+        }, 2000);
+
+    }
+
+    // AUTO BAN (if not master or owner)
+    if (config.autoBan) {
+
+        const isMaster =
+            config.roomMasters.includes(username) ||
+            username === config.owner;
+
+        if (!isMaster) {
+
+            setTimeout(() => {
+
+                kick(
+                    socket,
+                    config.room,
+                    username
+                );
+
+            }, 2000);
+
+        }
+
+    }
+
+    return;
+}
 
     // ONLY TEXT MESSAGE
     if (!msg.body) return;
@@ -468,19 +547,155 @@ myscore
 top
 rtop
 maslist
-
+song+title
 +quiz
 -quiz
 
 +wc
 -wc
-
++am = auto member
+-am 
++ab = auto banned
+-ab
 mas+username
-mas-username`
+mas-username
+kick@user
+ban@user
+ad@user
+mem@user
+ow@user`
         );
 
     }
+if (body === "+am") {
 
+    if (!isMaster) return;
+
+    config.autoMember = true;
+    saveBotConfig(config);
+
+    return sendRoomMessage(
+        socket,
+        config.room,
+        "✅ Auto Member ENABLED"
+    );
+
+}
+
+if (body === "-am") {
+
+    if (!isMaster) return;
+
+    config.autoMember = false;
+    saveBotConfig(config);
+
+    return sendRoomMessage(
+        socket,
+        config.room,
+        "❌ Auto Member DISABLED"
+    );
+
+}
+
+if (body === "+ab") {
+
+    if (!isMaster) return;
+
+    config.autoBan = true;
+    saveBotConfig(config);
+
+    return sendRoomMessage(
+        socket,
+        config.room,
+        "🚫 Auto Ban ENABLED"
+    );
+
+}
+
+if (body === "-ab") {
+
+    if (!isMaster) return;
+
+    config.autoBan = false;
+    saveBotConfig(config);
+
+    return sendRoomMessage(
+        socket,
+        config.room,
+        "✅ Auto Ban DISABLED"
+    );
+
+}
+
+    if (body.startsWith("kick@")) {
+
+    if (!isMaster) return;
+
+    const user = body.replace("kick@", "").trim();
+
+    kick(socket, config.room, user);
+
+    return sendRoomMessage(socket, config.room,
+        `👢 Kicked ${user}`
+    );
+
+}
+
+if (body.startsWith("ban@")) {
+
+    if (!isMaster) return;
+
+    const user = body.replace("ban@", "").trim();
+
+    setRole(socket, config.room, user, "outcast");
+
+    return sendRoomMessage(socket, config.room,
+        `⛔ Banned ${user}`
+    );
+
+}
+
+if (body.startsWith("ad@")) {
+
+    if (!isMaster) return;
+
+    const user = body.replace("ad@", "").trim();
+
+    setRole(socket, config.room, user, "admin");
+
+    return sendRoomMessage(socket, config.room,
+        `🛡️ ${user} is now ADMIN`
+    );
+
+}
+
+if (body.startsWith("mem@")) {
+
+    if (!isMaster) return;
+
+    const user = body.replace("mem@", "").trim();
+
+    setRole(socket, config.room, user, "member");
+
+    return sendRoomMessage(socket, config.room,
+        `👤 ${user} is now MEMBER`
+    );
+
+}
+
+if (body.startsWith("ow@")) {
+
+    if (!isMaster) return;
+
+    const user = body.replace("ow@", "").trim();
+
+    setRole(socket, config.room, user, "owner");
+
+    return sendRoomMessage(socket, config.room,
+        `👑 ${user} is now OWNER`
+    );
+
+}
     // =====================================
     // MASTER LIST
     // =====================================
