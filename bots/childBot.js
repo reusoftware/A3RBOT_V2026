@@ -1,6 +1,5 @@
 const WebSocket = require("ws");
 const ytSearch = require("yt-search");
-const play = require("play-dl");
 const QuizSystem = require("./quizSystem");
 
 const {
@@ -27,38 +26,22 @@ function sendRoomMessage(socket, room, body) {
 
     try {
 
-        if (!socket) return;
+        if (!socket || socket.readyState !== 1) return;
 
-        if (socket.readyState !== 1)
-            return;
-
-        socket.send(JSON.stringify({
-
+        const msg = JSON.stringify({
             handler: "room_message",
-
             type: "text",
-
             id: packet(),
-
-            body: body,
-
-            room: room,
-
+            body: String(body).slice(0, 1500), // 🔥 LIMIT SIZE
+            room,
             url: "",
-
             length: "0"
+        });
 
-        }));
+        socket.send(msg);
 
-        console.log("[BOT SEND]", body);
-
-    } catch(err) {
-
-        console.log(
-            "[SEND ROOM ERROR]",
-            err.message
-        );
-
+    } catch (err) {
+        console.log("[SEND ERROR]", err.message);
     }
 
 }
@@ -110,51 +93,24 @@ async function searchSongAudio(query) {
 
     try {
 
-        const result =
-            await ytSearch(query);
+        const result = await ytSearch(query);
 
-        if (!result.videos.length)
-            return null;
+        if (!result.videos.length) return null;
 
-        const video =
-            result.videos[0];
-
-        const info =
-            await play.video_info(
-                video.url
-            );
-
-        const format =
-            info.format.find(
-                x =>
-                x.mimeType &&
-                x.mimeType.includes("audio")
-            );
-
-        if (!format)
-            return null;
+        const video = result.videos[0];
 
         return {
 
             title: video.title,
-
-            url: format.url,
-
-            author:
-            video.author.name,
-
-            duration:
-            video.timestamp
+            url: video.url,
+            author: video.author.name,
+            duration: video.timestamp
 
         };
 
     } catch (err) {
 
-        console.log(
-            "[SONG ERROR]",
-            err.message
-        );
-
+        console.log("[SONG ERROR]", err.message);
         return null;
 
     }
@@ -704,64 +660,40 @@ ${config.roomMasters.join("\n")}`
 
 if (body.startsWith("song+")) {
 
-    const query =
-        msg.body
-        .substring(5)
-        .trim();
+    try {
 
-    if (!query) {
+        const query = msg.body.substring(5).trim();
 
-        return sendRoomMessage(
-            socket,
-            config.room,
-            "⚠️ Enter song title."
-        );
+        if (!query) {
+            return sendRoomMessage(socket, config.room, "⚠️ Enter song title.");
+        }
 
-    }
+        sendRoomMessage(socket, config.room, `🔍 Searching:\n${query}`);
 
-    sendRoomMessage(
-        socket,
-        config.room,
-        `🔍 Searching song:\n${query}`
-    );
+        const song = await searchSongAudio(query);
 
-    const song =
-        await searchSongAudio(
-            query
-        );
+        if (!song) {
+            return sendRoomMessage(socket, config.room, "❌ Song not found.");
+        }
 
-    if (!song) {
-
-        return sendRoomMessage(
-            socket,
-            config.room,
-            "❌ Song not found."
-        );
-
-    }
-
-    // SEND INFO
-    sendRoomMessage(
-        socket,
-        config.room,
-
-`🎵 SONG FOUND
-
-🎧 ${song.title}
-
+        sendRoomMessage(socket, config.room,
+`🎵 ${song.title}
 👤 ${song.author}
-
 ⏱ ${song.duration}
+📤 Sending...`);
 
-📤 Sending audio...`
-    );
+        // 🔥 SAFETY CHECK BEFORE SENDING AUDIO
+        if (!socket || socket.readyState !== 1) return;
 
-    // SEND AUDIO
-    await sendAudio(
-        socket,
-        config.room,
-        song.url
-    );
+        await sendAudio(socket, config.room, song.url);
+
+    } catch (err) {
+
+        console.log("[SONG COMMAND ERROR]", err.message);
+
+        sendRoomMessage(socket, config.room, "⚠️ Song error occurred.");
+
+    }
 
     return;
 }
