@@ -602,12 +602,8 @@ No players yet.`;
         text +=
 
 `\n\n${i + 1}. ${x[0]}
-⭐ Score:
-${x[1].score}
-
-⚡ Best Speed:
-${x[1].bestSpeed.toFixed(2)}s`;
-
+⭐ Score:${x[1].score}
+⚡ Best Speed:${x[1].bestSpeed.toFixed(2)}s`;
     });
 
     return text;
@@ -636,10 +632,8 @@ function getMyScore(user) {
 
 👤 Username:
 ${user}
-
 ⭐ Total Score:
 ${scores[user].score}
-
 ⚡ Best Speed:
 ${scores[user]
 .bestSpeed
