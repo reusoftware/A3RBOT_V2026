@@ -1,3 +1,11 @@
+process.on("uncaughtException", (err) => {
+    console.log("[CRASH PREVENTED]", err.message);
+});
+
+process.on("unhandledRejection", (err) => {
+    console.log("[PROMISE ERROR]", err);
+});
+
 const express = require("express");
 const http = require("http");
 const path = require("path");
