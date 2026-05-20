@@ -318,7 +318,7 @@ function start(config) {
                 if (
                     msg.type === "you_joined"
                 ) {
-
+saveBotConfig(config);
                     console.log(
                         "[ROOM JOINED]",
                         config.room
