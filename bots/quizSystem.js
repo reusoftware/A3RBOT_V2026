@@ -152,6 +152,10 @@ function stopQuiz(room) {
 // CREATE QUESTION
 // =====================================
 
+// =====================================
+// CREATE QUESTION
+// =====================================
+
 function createQuestion(
     socket,
     room
@@ -165,10 +169,12 @@ function createQuestion(
 
     let question = "";
     let answer = "";
+    let scrambled = "";
+    let hint = "";
 
     // 1 = math
     // 2 = scramble
-    // 3 = normal word
+    // 3 = normal
 
     const mode = rand(1, 3);
 
@@ -182,7 +188,7 @@ function createQuestion(
         const b = rand(1, 30);
 
         question =
-        `Solve: ${a} + ${b}`;
+        `🧮 Solve:\n${a} + ${b}`;
 
         answer =
         String(a + b);
@@ -190,7 +196,7 @@ function createQuestion(
     }
 
     // =================================
-    // SCRAMBLE
+    // SCRAMBLE WITH QUESTION
     // =================================
 
     else if (mode === 2) {
@@ -203,14 +209,19 @@ function createQuestion(
                 )
             ];
 
-        answer = pick.answer;
+        answer =
+            pick.answer
+            .toLowerCase()
+            .trim();
 
-        const scrambled =
+        scrambled =
             scrambleWord(answer);
 
         question =
-`🔀 Unscramble This Word
 
+`${pick.question}
+
+🔀 Scrambled:
 ${scrambled}`;
 
     }
@@ -233,18 +244,47 @@ ${scrambled}`;
             pick.question;
 
         answer =
-            pick.answer;
+            pick.answer
+            .toLowerCase()
+            .trim();
 
     }
+
+    // =================================
+    // HINT
+    // =================================
+
+    if (answer.length >= 2) {
+
+        hint =
+            answer[0] +
+            " " +
+            "_ ".repeat(
+                answer.length - 2
+            ) +
+            answer[
+                answer.length - 1
+            ];
+
+    } else {
+
+        hint = answer;
+
+    }
+
+    // =================================
+    // SAVE ACTIVE QUIZ
+    // =================================
 
     active[room] = {
 
         question,
 
-        answer:
-        String(answer)
-        .toLowerCase()
-        .trim(),
+        answer,
+
+        scrambled,
+
+        hint,
 
         repeat: 0,
 
@@ -281,13 +321,16 @@ function askLoop(
 
     q.repeat++;
 
-    const styles = [
+const styles = [
 
-`❓ Please Answer this😅!
+`❓ QUIZ QUESTION
 
-${q.question}`,
+${q.question}
 
-`🧠 NoBody Know?😅!
+💡 Type:
+hint`,
+
+`🧠 Still no answer?
 
 ${q.question}`,
 
@@ -295,15 +338,15 @@ ${q.question}`,
 
 ${q.question}`,
 
-`🔥 already given up yet 🥲😋
+`🔥 Nobody knows?
 
 ${q.question}`,
 
-`⏰ Are you confuse 🤪
+`⏰ Last chance!
 
 ${q.question}`
 
-    ];
+];
 
     sendRoom(
 
