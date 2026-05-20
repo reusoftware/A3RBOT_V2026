@@ -910,7 +910,31 @@ if (body.startsWith("song+")) {
     // =====================================
 
     if (config.quiz) {
+// =====================================
+// HINT
+// =====================================
 
+if (body === "hint") {
+
+    const q =
+        QuizSystem.activeQuiz(
+            config.room
+        );
+
+    if (!q)
+        return;
+
+    return sendRoomMessage(
+        socket,
+        config.room,
+
+`💡 HINT
+
+${q.hint}`
+
+    );
+
+}
         QuizSystem.handleAnswer(
             socket,
             config.room,
