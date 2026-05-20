@@ -740,6 +740,8 @@ module.exports = {
     stopQuiz,
     handleAnswer,
     getTop10,
-    getMyScore
+    getMyScore,
+    getRoomTop,
+    activeQuiz
 
 };
