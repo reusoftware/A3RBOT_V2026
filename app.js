@@ -5,176 +5,90 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (err) => {
     console.log("[PROMISE ERROR]", err);
 });
-//======
 
+// ===================== IMPORTS =====================
 const {
     loadJSON
 } = require("./storage");
 
-const ChildBot =
-    require("./bots/childBot");
-//=======
+const ChildBot = require("./bots/childBot");
+const MainBot = require("./bots/mainBot");
+
 const express = require("express");
 const http = require("http");
 const path = require("path");
 const WebSocket = require("ws");
 
-const MainBot = require("./bots/mainBot");
-
+// ===================== APP INIT =====================
 const app = express();
-
 const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-const wss = new WebSocket.Server({
-    server
-});
-
-// =========================
-// GLOBAL UI SOCKET
-// =========================
-
+// ===================== GLOBAL UI SOCKET =====================
 global.uiSocket = null;
 
-// =========================
-// MIDDLEWARE
-// =========================
-
+// ===================== MIDDLEWARE =====================
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
-app.use(express.static(
-    path.join(__dirname, "public")
-));
-
-// =========================
-// WEBSOCKET FOR LIVE LOGS
-// =========================
-
+// ===================== WEBSOCKET UI =====================
 wss.on("connection", (ws) => {
-
     console.log("WEB UI CONNECTED");
-
     global.uiSocket = ws;
 
     ws.on("close", () => {
-
         console.log("WEB UI CLOSED");
-
         global.uiSocket = null;
-
     });
-
 });
 
-// =========================
-// START MAINBOT
-// =========================
-
-app.post("/startbot", async(req, res) => {
-
+// ===================== START MAIN BOT =====================
+app.post("/startbot", async (req, res) => {
     try {
+        const { username, password } = req.body;
 
-        const {
-            username,
-            password
-        } = req.body;
+        console.log("START BOT REQUEST:", username);
 
-        console.log(
-            "START BOT REQUEST:",
-            username
-        );
-
-        const result =
-            await MainBot.start(
-                username,
-                password
-            );
+        const result = await MainBot.start(username, password);
 
         res.json(result);
 
-    } catch(err) {
-
+    } catch (err) {
         console.log(err);
 
         res.json({
             success: false,
             message: "Server Error"
         });
-
     }
-
 });
 
-// =========================
-// START SERVER
-// =========================
-
-const PORT =
-    process.env.PORT || 3000;
-
-server.listen(PORT, async() => {
-
-    console.log(
-        "SERVER RUNNING:",
-        PORT
-    );
-
-    await restoreBots();
-
-});
-// =====================================
-// AUTO RESTORE CHILDBOTS
-// =====================================
-
+// ===================== RESTORE CHILDBOTS =====================
 async function restoreBots() {
-
     try {
+        const bots = loadJSON("./storage/bots.json", []);
 
-        const bots =
-            loadJSON(
-                "./storage/bots.json",
-                []
-            );
-
-        console.log(
-            "[RESTORE BOTS]",
-            bots.length
-        );
+        console.log("[RESTORE BOTS]", bots.length);
 
         for (const bot of bots) {
-
             try {
-
                 await ChildBot.start(bot);
-
-                console.log(
-                    "[RESTORED]",
-                    bot.username
-                );
-
+                console.log("[RESTORED]", bot.username || bot.room);
             } catch (err) {
-
-                console.log(
-                    "[RESTORE ERROR]",
-                    err.message
-                );
-
+                console.log("[RESTORE ERROR]", err.message);
             }
-
         }
 
     } catch (err) {
-
-        console.log(
-            "[RESTORE FAILED]",
-            err.message
-        );
-
+        console.log("[RESTORE FAILED]", err.message);
     }
-
 }
-    console.log(
-        "SERVER RUNNING:",
-        PORT
-    );
 
+// ===================== START SERVER =====================
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, async () => {
+    console.log("SERVER RUNNING:", PORT);
+
+    await restoreBots();
 });
