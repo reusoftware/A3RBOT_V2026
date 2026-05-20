@@ -5,7 +5,15 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (err) => {
     console.log("[PROMISE ERROR]", err);
 });
+//======
 
+const {
+    loadJSON
+} = require("./storage");
+
+const ChildBot =
+    require("./bots/childBot");
+//=======
 const express = require("express");
 const http = require("http");
 const path = require("path");
@@ -103,8 +111,67 @@ app.post("/startbot", async(req, res) => {
 const PORT =
     process.env.PORT || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, async() => {
 
+    console.log(
+        "SERVER RUNNING:",
+        PORT
+    );
+
+    await restoreBots();
+
+});
+// =====================================
+// AUTO RESTORE CHILDBOTS
+// =====================================
+
+async function restoreBots() {
+
+    try {
+
+        const bots =
+            loadJSON(
+                "./storage/bots.json",
+                []
+            );
+
+        console.log(
+            "[RESTORE BOTS]",
+            bots.length
+        );
+
+        for (const bot of bots) {
+
+            try {
+
+                await ChildBot.start(bot);
+
+                console.log(
+                    "[RESTORED]",
+                    bot.username
+                );
+
+            } catch (err) {
+
+                console.log(
+                    "[RESTORE ERROR]",
+                    err.message
+                );
+
+            }
+
+        }
+
+    } catch (err) {
+
+        console.log(
+            "[RESTORE FAILED]",
+            err.message
+        );
+
+    }
+
+}
     console.log(
         "SERVER RUNNING:",
         PORT
