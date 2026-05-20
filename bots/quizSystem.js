@@ -584,8 +584,7 @@ function getTop10() {
         a[1].score
     );
 
-    let text =
-`🏆 TOP 10 PLAYERS 🏆`;
+    let text =`🏆 TOP 10 PLAYERS 🏆`;
 
     if (arr.length === 0) {
 
@@ -600,7 +599,6 @@ No players yet.`;
     .forEach((x, i) => {
 
         text +=
-
 `\n\n${i + 1}. ${x[0]}
 ⭐ Score:${x[1].score}
 ⚡ Best Speed:${x[1].bestSpeed.toFixed(2)}s`;
